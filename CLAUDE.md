@@ -10,6 +10,14 @@ A monorepo of Claude Code skills. Each skill lives in its own directory under `s
 
 ```
 skills/
+  flashcards/            ← High-yield flashcards from any source (book/lecture/notes)
+    SKILL.md             ← Skill definition (2 branches: batch + capture)
+    references/          ← card-quality.md, hint-rules.md
+    scripts/             ← build_cards.py (cards.json → .md / .apkg)
+  pymupdf-pdf/           ← Fast local PDF parsing with PyMuPDF (md/json/images/tables)
+    SKILL.md             ← Skill definition (frontmatter + usage)
+    references/          ← pymupdf-notes.md (install + libstdc++ fixes)
+    scripts/             ← pymupdf_parse.py
   prospero-search/       ← PROSPERO systematic review search & duplicate check
     SKILL.md             ← Skill definition (frontmatter + workflow)
     references/          ← API specs and supporting docs
@@ -18,6 +26,11 @@ skills/
     SKILL.md             ← Skill definition (frontmatter + usage guide)
     references/          ← CLI flags, providers, config template, gap analysis
     scripts/             ← run-review (pipeline runner)
+  liteparse/             ← LiteParse: local multi-format doc parsing (PDF/DOCX/img)
+  mineru/                ← MinerU: cloud VLM PDF extraction with layout analysis
+  parse-docs/            ← Gateway router for document-parsing skills
+  pdf-to-markdown/       ← Fast PDF → Markdown extraction
+  pdf-tools/             ← PDF engineering (generate/merge/encrypt/fill forms)
 ```
 
 - **`CLAUDE.md`** (this file) — repo-level development guidance, not distributed with any skill.

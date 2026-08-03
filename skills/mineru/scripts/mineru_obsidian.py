@@ -1,4 +1,4 @@
-#!/Users/mac/Developer/MN-backup/.agents/skills/mineru/.venv/bin/python3
+#!/usr/bin/env python3
 """
 MinerU PDF Parser - 直接输出到 Obsidian Vault
 

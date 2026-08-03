@@ -1,6 +1,6 @@
 ---
 name: pdf-tools
-description: 'PDF engineering for extraction, generation, modification, and form filling. Use when extracting text or tables from PDFs, generating PDFs with Puppeteer, modifying PDFs with pdf-lib, filling PDF forms, or implementing PDF security. Use for AI-assisted OCR, HTML-to-PDF conversion, and document processing pipelines.'
+description: 'PDF engineering for generation, modification, form filling, and security. Use when generating PDFs with Puppeteer, modifying/merging/splitting PDFs with pdf-lib, filling PDF forms, or implementing PDF security (encrypt/sign/redact). Use for HTML-to-PDF conversion and document processing pipelines. NOT for content extraction — use the parse-docs skill for that.'
 license: MIT
 metadata:
   author: oakoss
@@ -9,26 +9,24 @@ metadata:
 
 # PDF Tools
 
-Full-lifecycle PDF engineering covering extraction, generation, modification, form filling, and security. Prioritizes JavaScript-first solutions (pdf-lib, unpdf, Puppeteer) with Python/CLI utilities for advanced scenarios.
+Full-lifecycle PDF engineering covering generation, modification, form filling, and security. Prioritizes JavaScript-first solutions (pdf-lib, unpdf, Puppeteer) with Python/CLI utilities for advanced scenarios.
 
-**When to use**: Extracting structured data from PDFs, generating pixel-perfect PDFs from HTML/React, modifying existing PDFs, filling forms (fillable or non-fillable), or securing documents with encryption.
+**When to use**: Generating pixel-perfect PDFs from HTML/React, modifying existing PDFs, filling forms (fillable or non-fillable), securing documents (encrypt/sign/redact), or repairing PDFs.
 
-**When NOT to use**: Simple text file processing, image-only manipulation without PDF context, or tasks better handled by a word processor.
+**When NOT to use**:
+- **Content extraction** (text, tables, OCR, Markdown) → use the `parse-docs` skill, which routes to `pdf-to-markdown`, `pymupdf-pdf`, `liteparse`, or `mineru`.
+- Simple text file processing, image-only manipulation without PDF context, or tasks better handled by a word processor.
 
 ## Quick Reference
 
 | Task                       | Tool                          | Key Point                                                                  |
 | -------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
 | Generate PDF from HTML     | Puppeteer / Playwright        | `page.pdf()`; use `networkidle0` (Puppeteer) or `networkidle` (Playwright) |
-| Extract text (lightweight) | unpdf                         | Edge/serverless compatible                                                 |
-| Extract tables (AI)        | Vision model + Zod schema     | Multi-column and merged cell support                                       |
-| Extract tables (non-AI)    | pdfplumber (Python)           | Precise cell boundary detection                                            |
 | Modify, merge, split       | pdf-lib (or `@pdfme/pdf-lib`) | Byte-level PDF manipulation in JS                                          |
 | Fill fillable forms        | pdf-lib (or `@pdfme/pdf-lib`) | Inspect AcroForm fields before writing                                     |
 | Fill non-fillable forms    | Python annotation scripts     | Visual analysis + bounding box annotations                                 |
 | Encrypt PDF                | qpdf                          | AES-256: `qpdf --encrypt user owner 256 --`                                |
 | Repair corrupted PDF       | qpdf                          | `qpdf input.pdf --replace-input`                                           |
-| Fast text extraction (CLI) | poppler-utils                 | `pdftotext -layout input.pdf -`                                            |
 | Merge thousands of files   | pypdf (Python)                | Lighter than headless browser                                              |
 | Batch queue processing     | BullMQ + unpdf                | Redis-backed with retry, concurrency, progress tracking                    |
 | PDF/A archival compliance  | ghostscript + verapdf         | `gs -dPDFA=2` for conversion; verapdf for validation                       |
@@ -36,6 +34,8 @@ Full-lifecycle PDF engineering covering extraction, generation, modification, fo
 | Digital signatures         | @signpdf/\*                   | PKCS#7 signing with P12 certificates                                       |
 | PDF comparison             | unpdf + diff / pixelmatch     | Text diff or pixel-level visual diff between versions                      |
 | Secure redaction           | pymupdf (fitz)                | `apply_redactions()` removes content bytes, not just visual overlay        |
+
+> **Content extraction** (text, tables, OCR, Markdown) is handled by the `parse-docs` skill — don't use the tools below for that.
 
 ## Common Mistakes
 
