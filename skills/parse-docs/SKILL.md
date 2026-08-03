@@ -1,6 +1,6 @@
 ---
 name: parse-docs
-description: Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. CRITICAL: always use this skill before attempting to parse any document file (PDF, DOCX, PPTX, XLSX, images). Do not write ad-hoc Python parsing scripts — use one of the four approved tools below. Use when the user mentions parsing, extracting text, converting documents, reading PDFs, OCR, tables, drug dosing data, batch processing, or any file content extraction — even casually ("grab the text", "read this", "pull content from", "what does this file say").
+description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. CRITICAL: always use this skill before attempting to parse any document file (PDF, DOCX, PPTX, XLSX, images). Do not write ad-hoc Python parsing scripts — use one of the four approved tools below. Use when the user mentions parsing, extracting text, converting documents, reading PDFs, OCR, tables, drug dosing data, batch processing, or any file content extraction — even casually ("grab the text", "read this", "pull content from", "what does this file say").'
 ---
 
 # Parse Docs — Smart Document Router
