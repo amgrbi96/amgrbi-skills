@@ -108,4 +108,4 @@ See [`CLAUDE.md`](CLAUDE.md) for repo-level development guidance and per-skill t
 
 ## License
 
-Mixed. Each skill declares its own license in its `SKILL.md`; `pdf-to-markdown` is proprietary (Nutrient), others are MIT or unlicensed. See individual skills for details.
+[MIT](LICENSE) — applies to this repo and all skills unless a skill's `SKILL.md` states otherwise. Exception: `pdf-to-markdown` is proprietary (Nutrient) — see its SKILL.md for terms.
