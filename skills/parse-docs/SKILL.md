@@ -1,11 +1,11 @@
 ---
 name: parse-docs
-description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. CRITICAL: always use this skill before attempting to parse any document file (PDF, DOCX, PPTX, XLSX, images). Do not write ad-hoc Python parsing scripts — use one of the four approved tools below. Use when the user mentions parsing, extracting text, converting documents, reading PDFs, OCR, tables, drug dosing data, batch processing, or any file content extraction — even casually ("grab the text", "read this", "pull content from", "what does this file say").'
+description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. Use this skill before parsing any document (PDF, DOCX, PPTX, XLSX, images) — it checks which tools are installed and routes to the best fit. Use when the user mentions parsing, extracting text, converting a document, OCR, tables, drug dosing data, or batch processing — even casually ("grab the text", "read this", "pull content from").'
 ---
 
 # Parse Docs — Smart Document Router
 
-This skill routes document parsing jobs to one of four installed tools. Pick the first rule in the decision tree that matches — don't substitute a fifth option.
+This skill routes document parsing jobs to one of four installed tools. Pick the first rule in the decision tree that matches; the four tools here are the complete set.
 
 ## The Four Tools
 
@@ -22,6 +22,58 @@ This skill routes document parsing jobs to one of four installed tools. Pick the
 | **Needs** | — | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + `MINERU_TOKEN` |
 
 Set `$SKILL_DIR` to the absolute path of **this** skill's directory (the one containing this SKILL.md). All four sibling skills resolve as `$SKILL_DIR/../<name>/`.
+
+## Prerequisites — install check
+
+Before routing, confirm each tool the job might reach is present. Run these checks; install whatever is missing. A missing tool is **not** an error — route to an installed alternative, and tell the user what was skipped and why.
+
+```bash
+# pdf-to-markdown — the binary should exist next door
+test -x "$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" \
+  && echo "pdf-to-markdown: ok" \
+  || echo "pdf-to-markdown: MISSING"
+
+# pymupdf-pdf — script present + PyMuPDF importable
+test -f "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" \
+  && python3 -c "import fitz" 2>/dev/null \
+  && echo "pymupdf-pdf: ok" \
+  || echo "pymupdf-pdf: MISSING (script or PyMuPDF)"
+
+# liteparse — the `lit` CLI on PATH
+command -v lit >/dev/null 2>&1 \
+  && echo "liteparse: ok" \
+  || echo "liteparse: MISSING"
+
+# mineru — script present + token set
+test -f "$SKILL_DIR/../mineru/scripts/mineru_v2.py" \
+  && test -n "$MINERU_TOKEN" \
+  && echo "mineru: ok" \
+  || echo "mineru: MISSING (script or MINERU_TOKEN)"
+```
+
+### Installing a missing tool
+
+Every tool below is an agent skill published on [skills.sh](https://skills.sh). Install the whole set, or any one, with `npx skills add`:
+
+```bash
+# All four parsers + this router at once
+npx skills add amgrbi96/amgrbi-skills
+
+# Or install one at a time by subpath
+npx skills add amgrbi96/amgrbi-skills/skills/pdf-to-markdown
+npx skills add amgrbi96/amgrbi-skills/skills/pymupdf-pdf
+npx skills add amgrbi96/amgrbi-skills/skills/liteparse
+npx skills add amgrbi96/amgrbi-skills/skills/mineru
+```
+
+Per-tool setup after install:
+
+| Tool | Extra step |
+|---|---|
+| `pdf-to-markdown` | None — the `bin/` wrapper self-installs the binary on first run |
+| `pymupdf-pdf` | `pip install pymupdf pymupdf4llm` (see its `references/pymupdf-notes.md` for libstdc++ fixups) |
+| `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs); `brew install imagemagick` (images) |
+| `mineru` | `export MINERU_TOKEN=...` from https://mineru.net/user-center/api-token; `pip install requests aiohttp` |
 
 ## Decision Tree
 
@@ -123,7 +175,7 @@ Can't determine intent from context
 
 ## Running the Chosen Tool
 
-Once decided, run directly. Do NOT delegate back to the individual skill — the routing above replaces loading them.
+Once decided, run the command directly from this file — the routing above replaces loading each tool's own SKILL.md.
 
 ### pdf-to-markdown
 

@@ -12,60 +12,18 @@ metadata:
 
 Parse unstructured documents (PDF, DOCX, PPTX, XLSX, images, and more) locally with LiteParse: fast, lightweight, no cloud dependencies or LLM required.
 
-## Initial Setup
+## Setup
 
-When this skill is invoked, respond with:
-
-```
-I'm ready to use LiteParse to parse files locally. Before we begin, please confirm that:
-
-- `@llamaindex/liteparse` is installed globally (`npm i -g @llamaindex/liteparse`)
-- The `lit` CLI command is available in your terminal
-
-If both are set, please provide:
-
-1. One or more files to parse (PDF, DOCX, PPTX, XLSX, images, etc.)
-2. Any specific options: output format (json/text), page ranges, OCR preferences, DPI, etc.
-3. What you'd like to do with the parsed content.
-
-I will produce the appropriate `lit` CLI command or TypeScript script, and once approved, report the results.
-```
-
-Then wait for the user's input.
-
----
-
-## Step 0 — Install LiteParse (if needed)
-
-If `liteparse` is not yet installed, install it globally:
+If `lit` is not on PATH, install it and its format dependencies:
 
 ```bash
-npm i -g @llamaindex/liteparse
-```
+npm i -g @llamaindex/liteparse   # the CLI
+lit --version                    # verify
 
-Verify installation:
-
-```bash
-lit --version
-```
-
-For Office document support (DOCX, PPTX, XLSX), LibreOffice is required:
-
-```bash
-# macOS
-brew install --cask libreoffice
-
-# Ubuntu/Debian
-apt-get install libreoffice
-```
-
-For image parsing, ImageMagick is required:
-```bash
-# macOS
-brew install imagemagick
-
-# Ubuntu/Debian
-apt-get install imagemagick
+# Optional, only for the formats noted:
+brew install --cask libreoffice   # macOS — DOCX/PPTX/XLSX
+brew install imagemagick          # macOS — images
+# Ubuntu/Debian: apt-get install libreoffice imagemagick
 ```
 
 ---
@@ -123,7 +81,7 @@ lit screenshot document.pdf --pages "1-10" -o ./screenshots
 
 ---
 
-## Step 3 — Key Options Reference
+## Step 2 — Key Options Reference
 
 ### OCR Options
 
@@ -155,7 +113,7 @@ lit screenshot document.pdf --pages "1-10" -o ./screenshots
 
 ---
 
-## Step 4 — Using a Config File
+## Step 3 — Using a Config File
 
 For repeated use with consistent options, generate a `liteparse.config.json`:
 
@@ -190,7 +148,7 @@ lit parse document.pdf --config liteparse.config.json
 
 ---
 
-## Step 5 — HTTP OCR Server API (Advanced)
+## Step 4 — HTTP OCR Server API (Advanced)
 
 If the user wants to plug in a custom OCR backend, the server must implement:
 

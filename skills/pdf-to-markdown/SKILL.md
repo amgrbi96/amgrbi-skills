@@ -46,7 +46,7 @@ Images are saved to `{output}_resources/` alongside the output file and referenc
 2. **Run the converter**: `$SKILL_DIR/bin/pdf-to-markdown INPUT [OUTPUT]`
 3. **Check the exit code**: Exit 0 means success. On failure, read stderr for the error message.
 4. **Validate the output**: If the output file is empty or near-empty, see Troubleshooting below.
-5. **Report the output path**: Tell the user where the converted file(s) are. Do NOT read the markdown back into context by default — converted documents can be very large and will fill the context window. Only read the output if the user's task specifically requires analyzing or summarizing the content (e.g., "summarize this PDF", "what does this contract say about X").
+5. **Report the output path**: Tell the user where the converted file(s) are. Only read the output back into context when the task needs the content (e.g., "summarize this PDF", "what does this contract say about X").
 
 ## Troubleshooting
 
