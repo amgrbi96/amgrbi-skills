@@ -9,6 +9,8 @@ Optimizations:
 - 自动重试: 失败自动重试 3 次
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import os
@@ -18,7 +20,10 @@ import zipfile
 from pathlib import Path
 from typing import Optional, Tuple
 
-import aiohttp
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None  # checked in main; lets --help run without deps
 
 API_BASE = "https://mineru.net/api/v4"
 
@@ -166,6 +171,9 @@ async def main_async(args):
     token = args.token or os.environ.get("MINERU_TOKEN")
     if not token:
         print("❌ 请设置 MINERU_TOKEN")
+        sys.exit(1)
+    if aiohttp is None:
+        print("❌ 需要 aiohttp: pip install aiohttp")
         sys.exit(1)
     
     output_dir = Path(args.output)

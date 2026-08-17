@@ -21,6 +21,8 @@ metadata:
 
 Convert PDF, Word, PPT, and images to clean Markdown using MinerU's cloud VLM engine — LaTeX formulas, tables, and images all preserved. Highest accuracy of all the local parsers, at the cost of cloud round-trips.
 
+This skill calls MinerU's **cloud web API** (token-based). It does not use the official `mineru` CLI, which is a separate local tool with different flags (`-p`, `-b/--backend`, `--effort`).
+
 ## Setup
 
 1. Create an API token at https://mineru.net/user-center/api-token
@@ -56,7 +58,7 @@ See the `parse-docs` router skill for full decision logic.
 
 ## Commands
 
-Run from the skill directory (the `.venv` has `requests` + `aiohttp` installed):
+Requires `requests` and `aiohttp` (`pip install -r requirements.txt`). `--help` works without them; actual parsing exits with a clear error if they're missing.
 
 ### Single File
 
@@ -100,7 +102,7 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 ```
 --dir PATH          Input directory (PDF/Word/PPT/images)
 --file PATH         Single file
---output PATH       Output directory (default: ./output/)
+--output PATH       Output directory (required)
 --workers N         Concurrent workers (default: 5, max: 15)
 --resume            Skip already processed files
 --model MODEL       pipeline | vlm | MinerU-HTML (default: vlm)
@@ -125,8 +127,6 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 | `mineru_v2.py` | Default — async parallel (up to 15 workers) |
 | `mineru_async.py` | Fast network, need maximum throughput |
 | `mineru_stable.py` | Unstable network — sequential, max retry |
-
-Other scripts (`mineru_api.py`, `mineru_batch.py`, `mineru_parallel.py`, `mineru_obsidian.py`) are legacy variants — prefer `mineru_v2.py` unless you have a specific reason.
 
 ## Output Structure
 
