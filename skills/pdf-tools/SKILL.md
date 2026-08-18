@@ -4,7 +4,7 @@ description: 'PDF engineering for generation, modification, form filling, and se
 license: MIT
 metadata:
   author: oakoss
-  version: '1.2'
+  version: '1.3'
 ---
 
 # PDF Tools
@@ -16,6 +16,55 @@ Full-lifecycle PDF engineering covering generation, modification, form filling, 
 **When NOT to use**:
 - **Content extraction** (text, tables, OCR, Markdown) → use the `parse-docs` skill, which routes to `pdf-to-markdown`, `pymupdf-pdf`, `liteparse`, or `mineru`.
 - Simple text file processing, image-only manipulation without PDF context, or tasks better handled by a word processor.
+
+## Prerequisites — install check
+
+Each workflow uses a different slice of the toolset. Check what your task needs (see Quick Reference) and install only what's missing — a missing tool is **not** an error unless your workflow reaches for it.
+
+### Check
+
+```bash
+# Node.js >= 22 — required by Puppeteer 25.x and unpdf 1.8.x
+node --version
+
+# JS packages — run from the project that will use them
+for pkg in pdf-lib puppeteer unpdf bullmq @signpdf/signpdf; do
+  npm ls --depth=0 "$pkg" >/dev/null 2>&1 && echo "$pkg: ok" || echo "$pkg: MISSING"
+done
+
+# Python packages
+for mod in pymupdf pdfplumber pypdf; do
+  python3 -c "import $mod" 2>/dev/null && echo "$mod: ok" || echo "$mod: MISSING"
+done
+
+# CLI tools
+for cmd in qpdf gs verapdf pdftotext exiftool redis-server; do
+  command -v "$cmd" >/dev/null 2>&1 && echo "$cmd: ok" || echo "$cmd: MISSING"
+done
+```
+
+`redis-server` is only needed for BullMQ batch workflows; `verapdf` only for PDF/A validation.
+
+### Install
+
+```bash
+# JS — install into the project you're working in
+npm i pdf-lib puppeteer unpdf    # core: modify/merge/split, HTML→PDF, comparison
+npm i @cantoo/pdf-lib            # drop-in pdf-lib with encrypted-PDF support
+npm i @signpdf/signpdf @signpdf/signer-p12 @signpdf/placeholder-plain \
+  @signpdf/utils                 # digital signatures
+
+# Python
+pip install pymupdf pdfplumber pypdf
+
+# CLI — macOS
+brew install qpdf ghostscript verapdf poppler exiftool redis
+
+# CLI — Debian/Ubuntu (verapdf is not packaged; download from docs.verapdf.org)
+sudo apt install qpdf ghostscript poppler-utils libimage-exiftool-perl redis-server
+```
+
+Puppeteer downloads its own Chromium at install — no separate Chrome needed. If the browser is missing (e.g. `PUPPETEER_SKIP_DOWNLOAD` was set), run `npx puppeteer browsers install chrome`.
 
 ## Quick Reference
 
