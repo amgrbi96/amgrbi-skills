@@ -16,7 +16,9 @@ export async function POST(req: Request) {
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
 
-  await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+  // page.pdf() returns Uint8Array (not Buffer) in current Puppeteer
+  await page.setContent(htmlContent);
+  await page.waitForNetworkIdle(); // let fonts/images settle before printing
   const pdfBuffer = await page.pdf({
     format: 'A4',
     printBackground: true,
@@ -51,7 +53,8 @@ export async function createPdfFromReact(Component, props) {
 
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
-  await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+  await page.setContent(fullHtml);
+  await page.waitForNetworkIdle();
 
   const pdf = await page.pdf({
     format: 'A4',
@@ -78,7 +81,7 @@ For professional printing, consider CMYK color profiles in CSS.
 
 ## Playwright Equivalent
 
-Playwright uses `networkidle` instead of Puppeteer's `networkidle0`. Playwright does not support `networkidle2`. The `page.pdf()` API is otherwise identical:
+Puppeteer's `setContent()` accepts only `'load'` or `'domcontentloaded'` as `waitUntil` (since v24.43) — wait for network idle separately via `page.waitForNetworkIdle()`. Playwright's `setContent()`/`goto()` accept `waitUntil: 'networkidle'` (no zero suffix). The `page.pdf()` options are otherwise the same, but Playwright returns a `Buffer` where Puppeteer returns `Uint8Array`:
 
 ```ts
 import { chromium } from 'playwright';
@@ -96,7 +99,7 @@ System fonts may not be available in Docker or serverless environments:
 
 - Embed Google Fonts via `<link>` or inline CSS
 - Bundle WOFF2 files in the project and load via `@font-face`
-- Ensure `waitUntil: 'networkidle0'` (Puppeteer) or `'networkidle'` (Playwright) to allow font loading
+- Await `page.waitForNetworkIdle()` (Puppeteer) or `waitUntil: 'networkidle'` (Playwright) to allow font loading
 
 ## Browser Pool Optimization
 
@@ -112,5 +115,5 @@ Launching a browser takes approximately 500ms. In high-traffic APIs:
 | -------------- | ----------------------------- | ------------------------------------------------------------ |
 | Missing fonts  | System fonts not in container | Embed Google Fonts or WOFF2                                  |
 | Huge file size | High-res images not optimized | Compress with ghostscript or pdf-lib                         |
-| Blank pages    | Content not loaded before PDF | Use `networkidle0` (Puppeteer) or `networkidle` (Playwright) |
+| Blank pages    | Content not loaded before PDF | `setContent` then `waitForNetworkIdle()` (Puppeteer) or `networkidle` (Playwright) |
 | Wrong margins  | Default browser margins       | Set explicit `margin` in `page.pdf()` options                |

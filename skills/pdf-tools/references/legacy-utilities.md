@@ -67,12 +67,12 @@ pdftotext -enc UTF-8 input.pdf output.txt
 
 ## pdf-lib Maintenance Note
 
-The original `pdf-lib` (Hopding/pdf-lib) has not received updates since 2022. For active maintenance, use one of these forks:
+The original `pdf-lib` (Hopding/pdf-lib) has not been updated since 2021. For active maintenance, use one of these forks:
 
-- **`@pdfme/pdf-lib`** -- Adds `drawSvg`, rounded rectangles, actively maintained
-- **`@cantoo/pdf-lib`** -- Adds encrypted PDF support (`{ ignoreEncryption: true }`)
+- **`@cantoo/pdf-lib`** -- Adds encrypted PDF support: load with `PDFDocument.load(bytes, { password: '...' })` and encrypt on save via `doc.encrypt({ userPassword, ownerPassword })`. Note the original's `{ ignoreEncryption: true }` option only suppresses the load error — it never decrypts.
+- **`@pdfme/pdf-lib`** -- Adds `page.drawSvg()`/`drawSvgPath()`, rounded rectangles, actively maintained
 
-Both forks are API-compatible with the original. The original package still works for basic use cases (merge, split, form filling on unencrypted PDFs).
+Both forks are API-compatible with the original (`@cantoo` is now 2.x — check its MIGRATION.md for breaking changes). The original package still works for basic use cases (merge, split, form filling on unencrypted PDFs).
 
 ## Tool Selection Guide
 

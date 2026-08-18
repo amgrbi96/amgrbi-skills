@@ -20,16 +20,19 @@ tags:
 Use BullMQ for reliable queue-based PDF processing with retry logic and progress tracking:
 
 ```ts
-import { Queue, Worker } from 'bullmq';
+import { Queue, QueueEvents, Worker } from 'bullmq';
 import { extractText, getDocumentProxy } from 'unpdf';
+import * as fs from 'node:fs/promises';
 
 interface PdfJob {
   filePath: string;
   outputPath: string;
 }
 
+const connection = { host: 'localhost', port: 6379 };
+
 const pdfQueue = new Queue<PdfJob>('pdf-processing', {
-  connection: { host: 'localhost', port: 6379 },
+  connection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 1000 },
@@ -37,6 +40,8 @@ const pdfQueue = new Queue<PdfJob>('pdf-processing', {
     removeOnFail: 500,
   },
 });
+
+const queueEvents = new QueueEvents('pdf-processing', { connection });
 
 const worker = new Worker<PdfJob>(
   'pdf-processing',
@@ -52,7 +57,7 @@ const worker = new Worker<PdfJob>(
     return { pages: pdf.numPages, chars: text.length };
   },
   {
-    connection: { host: 'localhost', port: 6379 },
+    connection,
     concurrency: 4,
   },
 );
@@ -381,13 +386,13 @@ Visual overlays are the most common redaction mistake. The text remains in the f
 qpdf --qdf --object-streams=disable input.pdf decompressed.pdf
 
 # Step 2: Apply redaction with a dedicated tool
-# Python's pymupdf (fitz) performs true content removal
+# Python's pymupdf performs true content removal
 ```
 
 ```python
-import fitz
+import pymupdf
 
-doc = fitz.open("input.pdf")
+doc = pymupdf.open("input.pdf")
 page = doc[0]
 
 sensitive_areas = page.search_for("SSN: 123-45-6789")
@@ -444,5 +449,5 @@ async function stripMetadata(buffer: Buffer) {
 | Digital signing        | @signpdf/\*        | PKCS#7 signatures                   |
 | Text comparison        | unpdf + diff       | Structural text diff                |
 | Visual comparison      | pixelmatch         | Pixel-level page diff               |
-| Secure redaction       | pymupdf (fitz)     | True content removal                |
+| Secure redaction       | pymupdf            | True content removal                |
 | Metadata stripping     | exiftool / pdf-lib | Remove author, title, timestamps    |

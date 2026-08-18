@@ -4,7 +4,7 @@ description: 'PDF engineering for generation, modification, form filling, and se
 license: MIT
 metadata:
   author: oakoss
-  version: '1.1'
+  version: '1.2'
 ---
 
 # PDF Tools
@@ -21,7 +21,7 @@ Full-lifecycle PDF engineering covering generation, modification, form filling, 
 
 | Task                       | Tool                          | Key Point                                                                  |
 | -------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
-| Generate PDF from HTML     | Puppeteer / Playwright        | `page.pdf()`; use `networkidle0` (Puppeteer) or `networkidle` (Playwright) |
+| Generate PDF from HTML     | Puppeteer / Playwright        | `page.pdf()`; settle fonts via `waitForNetworkIdle()` (Puppeteer) or `networkidle` (Playwright) |
 | Modify, merge, split       | pdf-lib (or `@pdfme/pdf-lib`) | Byte-level PDF manipulation in JS                                          |
 | Fill fillable forms        | pdf-lib (or `@pdfme/pdf-lib`) | Inspect AcroForm fields before writing                                     |
 | Fill non-fillable forms    | Python annotation scripts     | Visual analysis + bounding box annotations                                 |
@@ -33,7 +33,7 @@ Full-lifecycle PDF engineering covering generation, modification, form filling, 
 | Tagged PDF (accessibility) | Puppeteer                     | `tagged: true` maps HTML semantics to PDF structure tags                   |
 | Digital signatures         | @signpdf/\*                   | PKCS#7 signing with P12 certificates                                       |
 | PDF comparison             | unpdf + diff / pixelmatch     | Text diff or pixel-level visual diff between versions                      |
-| Secure redaction           | pymupdf (fitz)                | `apply_redactions()` removes content bytes, not just visual overlay        |
+| Secure redaction           | pymupdf                       | `apply_redactions()` removes content bytes, not just visual overlay        |
 
 > **Content extraction** (text, tables, OCR, Markdown) is handled by the `parse-docs` skill — don't use the tools below for that.
 
@@ -59,7 +59,6 @@ Full-lifecycle PDF engineering covering generation, modification, form filling, 
 
 ## References
 
-- [AI Extraction Patterns](references/ai-extraction-patterns.md) -- Vision-based table extraction, recursive summarization, multi-pass verification
 - [High-Fidelity Generation](references/high-fidelity-generation.md) -- Puppeteer HTML-to-PDF, CSS print tips, React templates, browser pooling
 - [Legacy Utilities](references/legacy-utilities.md) -- pdfplumber, pypdf, qpdf, poppler-utils for batch and forensic tasks
 - [Form Filling](references/form-filling.md) -- Fillable field extraction, non-fillable annotation workflow, validation scripts
