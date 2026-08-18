@@ -1,18 +1,23 @@
 ---
 name: pdf-to-markdown
-description: Extract text from PDFs as structured, semantic Markdown. Use when converting a PDF to Markdown, extracting text from a PDF, processing one or more PDFs into Markdown output, reading PDF contents for analysis, ingesting documents for RAG pipelines, preparing PDFs for LLM context, or any task where PDF text needs to be in a machine-readable format. ALWAYS use this skill when the user has a PDF and needs its content as text or Markdown — even if they don't explicitly say "convert to markdown".
+description: Extract text from PDFs as structured, semantic Markdown. Use when converting a PDF to Markdown, extracting text from a PDF, processing one or more PDFs into Markdown output, reading PDF contents for analysis, ingesting documents for RAG pipelines, preparing PDFs for LLM context, or any task where PDF text needs to be in a machine-readable format. ALWAYS use this skill when the user has a PDF and needs its content as text or Markdown — even if they don't explicitly say "convert to markdown". Fastest option for PDFs with a text layer; cannot OCR scanned PDFs on the free tier (route those to mineru/liteparse).
 license: Proprietary
 ---
 
 # PDF to Markdown
 
-Convert PDFs into structured, semantic Markdown that preserves the document's logical structure — headings, tables, lists, and reading order — rather than producing flat text. This is significantly higher quality than reading a PDF directly with the `read` tool, which only extracts raw text without structure.
+Fast, local PDF → structured Markdown via Nutrient's CLI. Preserves headings, tables, lists, and reading order — significantly better than reading a PDF as raw text. Best choice for speed on PDFs that have a real text layer. **No OCR on the free tier**: scanned/image-only PDFs produce empty output with exit code 0 (see [Failure modes](#failure-modes-verified-aug-2026)).
+
+## What the binary is
+
+`bin/pdf-to-markdown` is a POSIX-shell wrapper, not a bundled converter. On first run it downloads Nutrient's proprietary CLI (`nutrient-<platform>`, currently v1.4.1) from `agent-cdn.nutrient.io` into `~/.local/share/nutrient/cli/` and `exec`s it. It re-checks the CDN for updates every 6 hours; if the check fails but a binary is cached, the cached binary is used silently.
+
+- Platforms: `linux-amd64`, `linux-arm64`, `macos-arm64`. Intel Macs (Darwin/x86_64) are **unsupported** — the wrapper exits 1.
+- The underlying CLI is multi-command. The same wrapper also exposes `pdf-to-text` (layout-preserving plain text) and `query` (BM25 search over extracted `.md`/`.txt`). This skill only documents `pdf-to-markdown`.
 
 ## Usage
 
-Before running any commands, set `SKILL_DIR` to the absolute path of the directory containing this SKILL.md file. Use `$SKILL_DIR/bin/pdf-to-markdown` in all commands below.
-
-The `$SKILL_DIR/bin/pdf-to-markdown` wrapper automatically installs the platform-specific binary into `~/.local/share/nutrient/cli/` from the CDN. It caches the binary and only checks for updates every 6 hours, so subsequent runs are fast.
+Set `SKILL_DIR` to the absolute path of the directory containing this SKILL.md. Use `$SKILL_DIR/bin/pdf-to-markdown` in all commands below.
 
 ### Single file
 
@@ -20,47 +25,77 @@ The `$SKILL_DIR/bin/pdf-to-markdown` wrapper automatically installs the platform
 $SKILL_DIR/bin/pdf-to-markdown INPUT.pdf OUTPUT.md
 ```
 
-If `OUTPUT.md` is omitted, the converter writes the Markdown to stdout instead.
+If `OUTPUT.md` is omitted, the Markdown goes to stdout.
 
 ### Batch directory (2+ files)
-
-For multiple files, pass directories instead of individual files. The converter processes all PDFs in the input directory in parallel, which is much faster than converting one at a time.
 
 ```bash
 $SKILL_DIR/bin/pdf-to-markdown INPUT_DIR/ OUTPUT_DIR/
 ```
 
-### Image export
+Converts every file in the input directory in parallel (it does **not** filter by extension — a stray `.txt` becomes a per-file error). Successes are still written when some files fail; exit code is 1 with an `N of M files failed` summary on stderr.
 
-To extract images from the PDF and reference them in the output Markdown, add the `--enable-image-export` flag:
+### Image export
 
 ```bash
 $SKILL_DIR/bin/pdf-to-markdown --enable-image-export INPUT.pdf OUTPUT.md
 ```
 
-Images are saved to `{output}_resources/` alongside the output file and referenced as standard Markdown image links. This is useful when feeding output to LLMs that support vision, or when image context improves downstream accuracy. Off by default because it increases processing time for image-heavy documents.
+Images are saved to `{output}_resources/` as `image_NNN.jpeg` and referenced with relative Markdown links. Two caveats: alt text is always the literal string `Description` (no real captions), and links are relative — move the `_resources` directory together with the `.md` or the links break.
 
-## Workflow
+## CLI flags (verified against nutrient 1.4.1, Aug 2026)
 
-1. **Choose mode**: Use batch directory mode for 2+ files, single file mode otherwise.
-2. **Run the converter**: `$SKILL_DIR/bin/pdf-to-markdown INPUT [OUTPUT]`
-3. **Check the exit code**: Exit 0 means success. On failure, read stderr for the error message.
-4. **Validate the output**: If the output file is empty or near-empty, see Troubleshooting below.
-5. **Report the output path**: Tell the user where the converted file(s) are. Only read the output back into context when the task needs the content (e.g., "summarize this PDF", "what does this contract say about X").
+```
+INPUT [OUTPUT]       Convert one PDF; stdout if OUTPUT omitted
+INDIR OUTDIR         Batch-convert a directory in parallel
+--enable-image-export  Export images to {output}_resources/ and reference them
+--vision             Machine-vision ICR pipeline (layout, tables, formulas)
+--provider P         Vision provider: auto (default) | gpu | cpu; only with --vision
+--license-key KEY    Not listed in --help but accepted; activates a paid license
+```
 
-## Troubleshooting
+**`--vision` is license-gated.** On the free tier it exits 1 with `vision extraction failed (3017): ... 'vision_icr_api'`. Don't reach for it unless a license key is in hand — for scanned PDFs, route to mineru or liteparse instead (see below).
 
-- **Empty or minimal output**: The PDF may be scanned/image-only and contains no extractable text.
-- **Non-zero exit code**: Read stderr for the specific error. Common causes: corrupted PDF, unsupported encryption, or network issues during first-run binary download.
-- **First run is slow**: The wrapper downloads the platform binary on first use (~a few seconds). Subsequent runs use the cached binary.
+## Output characteristics (verified)
+
+- Headings become ATX (`#`/`##`), mapped from font size/weight.
+- **Heading detection is inconsistent**: headings immediately followed by a list or a table are sometimes emitted as plain text. Spot-check heading counts against the PDF.
+- Tables become HTML `<table>` blocks, not GFM pipe tables. Column structure is preserved; fine for rendering and LLMs, awkward for grep/diff.
+- Two-column pages keep correct column reading order on simple layouts. Complex layouts are untested here — prefer mineru.
+- Multi-page documents concatenate with **no page-break markers**, and repeated headers/footers are kept verbatim on every page.
+- Whitespace is loose: runs of blank lines between blocks.
+
+## Failure modes (verified Aug 2026)
+
+| Situation | Behavior |
+|---|---|
+| Scanned / image-only PDF | **Exit 0 with ~2 bytes of output.** Silent success — always check output size after converting. |
+| `--vision` without paid license | Exit 1, error 3017 `vision_icr_api` |
+| Encrypted PDF | Exit 1, error 3026 `PdfDocumentMustBeUnencrypted` — and a **0-byte OUTPUT file is left behind**, so "file exists" ≠ success |
+| Nonexistent / corrupt / non-PDF input | Exit 1, `failed to open document` on stderr |
+| Output directory missing | Exit 1, clear stderr message |
+| Extra positional arg (3+ args) | **Exit 0** — arg 2 is silently used as OUTPUT, arg 3 ignored. Double-check command shape. |
+| No network and no cached binary | Exit 1 at wrapper stage; first run needs the CDN |
+
+After every run, validate: `test -s OUTPUT.md || echo "empty — likely scanned; reroute to mineru/liteparse"`.
+
+## When to route to another parser
+
+| Situation | Use instead |
+|---|---|
+| Scanned / OCR needed | **mineru** (cloud VLM, best accuracy) or **liteparse** (local Tesseract) |
+| LaTeX formulas | **mineru** |
+| Complex multi-column or mixed layouts | **mineru** |
+| DOCX / PPTX / XLSX / images | **liteparse** or **mineru** |
+| PDF tables as machine-readable data | **pymupdf-pdf** (JSON) |
+| Fast local conversion of a text-layer PDF | this skill |
+
+See the `parse-docs` router skill for the full decision tree.
+
+## Performance
+
+Single small PDF: ~0.1–0.4 s. Batch mode converts in parallel. First run downloads the binary (a few seconds); subsequent runs use the cache and only hit the CDN every 6 hours.
 
 ## License
 
-Free for processing up to 1,000 documents per calendar month.
-
-Commercial license required for:
-- processing over 1,000 documents/month
-- redistributing the binary
-- OEM/white-label use
-
-Contact `sales@nutrient.io` for commercial licensing.
+Free tier: up to **1,000 documents per calendar month**, where each processing event counts as one document — converting the same file twice counts twice. Within the free tier, internal use, SaaS/OEM/embedded/white-label use, and serving third parties are all permitted. A commercial license (sales@nutrient.io) is required only above 1,000 documents/month; using the software to compete with Nutrient's offerings is prohibited. The binary collects and transmits usage telemetry (performance, feature usage, volume — not document contents). Full terms: `--license`.

@@ -15,7 +15,7 @@ This skill routes document parsing jobs to one of four installed tools. Pick the
 | **Formats** | PDF only | PDF only | PDF, DOCX, PPTX, XLSX, images | PDF, DOCX, PPTX, images |
 | **Output** | Structured Markdown | Markdown / JSON / images / tables | Text or JSON + bounding boxes | Markdown + images + metadata |
 | **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast (local) | 🐢 ~0.030s/pg | 🐢 Slowest (cloud round-trip) |
-| **Tables** | Loses column relationships | Rough line-based JSON | Preserves cell-to-value mappings | Best (VLM) |
+| **Tables** | HTML tables, columns preserved | Rough line-based JSON | Preserves cell-to-value mappings | Best (VLM) |
 | **Formulas** | None | None | None | LaTeX recognition |
 | **OCR** | None | None | Tesseract.js (built-in) | Cloud VLM (best) |
 | **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pg/day priority |
