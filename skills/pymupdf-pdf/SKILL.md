@@ -1,6 +1,20 @@
 ---
 name: pymupdf-pdf
 description: Fast local PDF parsing with PyMuPDF (fitz) for Markdown/JSON outputs and optional images/tables. Use when speed matters more than robustness, or as a fallback while heavier parsers are unavailable. Default to single-PDF parsing with per-document output folders.
+metadata:
+  openclaw:
+    emoji: "📄"
+    requires:
+      bins: ["python3"]
+    install:
+      - id: pip
+        kind: pip
+        packages: ["pymupdf"]
+        label: "Install PyMuPDF (pip)"
+      - id: pip-optional
+        kind: pip
+        packages: ["pymupdf4llm"]
+        label: "Optional: layout detection addon (pymupdf.layout)"
 ---
 
 # PyMuPDF PDF
@@ -8,9 +22,47 @@ description: Fast local PDF parsing with PyMuPDF (fitz) for Markdown/JSON output
 ## Overview
 Parse PDFs locally using PyMuPDF for fast, lightweight extraction into Markdown by default, with optional JSON and image/table outputs in a per-document directory.
 
-## Prereqs / when to read references
-If you hit import errors (PyMuPDF not installed) or Nix `libstdc++` issues, read:
-- `references/pymupdf-notes.md`
+## Setup
+
+Prerequisites: `python3` + the `pymupdf` package. Nothing else — no cloud, no token, no other binaries. The script exits 1 with an install hint if PyMuPDF is missing (`--help` works without it).
+
+1. Install PyMuPDF:
+
+```bash
+pip install pymupdf
+```
+
+If pip refuses with "externally-managed-environment" (macOS/Linux system Python), either use a venv:
+
+```bash
+python3 -m venv ~/.venvs/pymupdf
+~/.venvs/pymupdf/bin/pip install pymupdf
+# then invoke the script with that interpreter:
+~/.venvs/pymupdf/bin/python3 scripts/pymupdf_parse.py /path/to/file.pdf
+```
+
+or force it: `pip install --break-system-packages pymupdf`.
+
+2. Verify the dependency:
+
+```bash
+python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect: 1.24.x or later
+```
+
+3. Smoke-test the script (validates dependency + a real PDF, writes nothing):
+
+```bash
+./scripts/pymupdf_parse.py /path/to/any.pdf --dry-run
+# expect: "✅ Dry run OK — valid PDF, N pages. Ready to parse." (exit 0)
+```
+
+Troubleshooting: NixOS `libstdc++` import failures and other notes live in `references/pymupdf-notes.md`.
+
+Optional — layout detection (`pymupdf.layout`, see below) additionally needs:
+
+```bash
+pip install pymupdf4llm
+```
 
 ## Quick start (single PDF)
 ```bash

@@ -35,7 +35,7 @@ test -x "$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" \
 
 # pymupdf-pdf — script present + PyMuPDF importable
 test -f "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" \
-  && python3 -c "import fitz" 2>/dev/null \
+  && python3 -c "import pymupdf" 2>/dev/null \
   && echo "pymupdf-pdf: ok" \
   || echo "pymupdf-pdf: MISSING (script or PyMuPDF)"
 

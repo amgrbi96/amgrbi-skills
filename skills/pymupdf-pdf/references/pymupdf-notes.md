@@ -11,7 +11,23 @@ Install:
 pip install pymupdf
 ```
 
-Nix note (if import fails with libstdc++ missing):
+If pip refuses ("externally-managed-environment" on macOS/Linux system Python):
+
+```bash
+# option A: dedicated venv (recommended)
+python3 -m venv ~/.venvs/pymupdf
+~/.venvs/pymupdf/bin/pip install pymupdf
+
+# option B: force system-wide
+pip install --break-system-packages pymupdf
+```
+
+Verify:
+```bash
+python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect 1.24.x+
+```
+
+Nix note (if `import pymupdf` fails with libstdc++ missing):
 ```bash
 # Find a gcc lib path and export it:
 ls /nix/store/*gcc*/lib/libstdc++.so.6 2>/dev/null | head -1

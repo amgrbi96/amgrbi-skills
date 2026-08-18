@@ -3,6 +3,7 @@
 ## v0.2.0 (2026-08-19)
 
 ### Added
+- Setup section with install/verify/dry-run flow; `openclaw` install metadata (`pip install pymupdf`)
 - `--dry-run`: validate the input PDF (opens it, reports page count) without writing anything
 - Pre-flight checks: missing file, non-PDF extension, empty file, corrupt PDF, password-protected PDF
 - Clear error + install hint when PyMuPDF is missing (`--help` works without the dependency)
