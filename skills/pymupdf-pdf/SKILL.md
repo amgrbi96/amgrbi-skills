@@ -20,18 +20,31 @@ If you hit import errors (PyMuPDF not installed) or Nix `libstdc++` issues, read
   --outroot ./pymupdf-output
 ```
 
+Always validate first — checks the file and opens the PDF without writing anything:
+
+```bash
+./scripts/pymupdf_parse.py /path/to/file.pdf --dry-run
+```
+
 ## Options
 - `--format md|json|both` (default: `md`)
 - `--images` to extract images
 - `--tables` to extract a simple line-based table JSON (quick/rough)
-- `--outroot DIR` to change output root
-- `--lang` adds a language hint into JSON output metadata
+- `--outroot DIR` to change output root (default: `./pymupdf-output`)
+- `--lang` adds a language hint into JSON output metadata (default: `en`)
+- `--dry-run` to validate the input PDF and exit without writing anything
+
+## Error handling
+- Pre-flight checks reject: missing file, non-PDF extension, empty file, corrupt PDF, password-protected PDF — each with a one-line error
+- Missing PyMuPDF exits with a clear install hint (`pip install pymupdf`); `--help` works without the dependency
+- Exit code 0 only on success (or dry-run OK); 1 on invalid input, missing dependency, or parse failure — safe for scripting
+- A JSON summary block (file, pages, outputs, elapsed) prints at the end
 
 ## Output conventions
-- Create `./pymupdf-output/<pdf-basename>/` by default.
-- Markdown output: `output.md`
+- Create `./pymupdf-output/<pdf-stem>/` by default (filename without extension).
+- Markdown output: `output.md` (with `<!-- page N -->` markers per page)
 - JSON output: `output.json` (includes `lang`)
-- Images: `images/` subdir
+- Images: `images/` subdir (`page-N-img-M.png`)
 - Tables: `tables.json` (rough line-based)
 
 ## Layout Detection (pymupdf.layout addon)

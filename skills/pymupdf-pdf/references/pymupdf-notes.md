@@ -1,6 +1,6 @@
 # PyMuPDF Notes
 
-- Fast local parsing via PyMuPDF (`fitz`).
+- Fast local parsing via PyMuPDF — `import pymupdf` (canonical since 1.24; the old `import fitz` name is deprecated and the script only uses it as a fallback for older installs).
 - Less robust than specialized PDF parsers; table extraction is minimal.
 - `page.get_text("markdown")` gives quick Markdown output.
 - `page.get_text("text")` provides plain text for JSON.
