@@ -1,0 +1,83 @@
+#!/bin/sh
+# Pre-flight check for the pdf-to-markdown skill.
+# Usage: check-env [--install]
+#   (no args)  verify platform + tools; report install state
+#   --install  also download the binary now, so later runs work offline
+# Exit 0 = ready (binary self-installs on first run if missing)
+# Exit 1 = a prerequisite failed or install failed
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+WRAPPER="$SCRIPT_DIR/pdf-to-markdown"
+STATE_DIR="${HOME}/.local/share/nutrient"
+
+case "${1:-}" in
+  ""|--install) ;;
+  *) echo "usage: $0 [--install]" >&2; exit 2 ;;
+esac
+
+fail=0
+
+case "$(uname -s)/$(uname -m)" in
+  Linux/aarch64) BINARY_NAME="nutrient-linux-arm64" ;;
+  Linux/x86_64) BINARY_NAME="nutrient-linux-amd64" ;;
+  Darwin/arm64) BINARY_NAME="nutrient-macos-arm64" ;;
+  *)
+    echo "FAIL: unsupported platform: $(uname -s)/$(uname -m)"
+    echo "  supported: linux-amd64, linux-arm64, macos-arm64 (Intel Macs are not)"
+    exit 1
+    ;;
+esac
+echo "ok: platform $(uname -s)/$(uname -m) -> $BINARY_NAME"
+
+if command -v curl >/dev/null 2>&1; then
+  echo "ok: curl found (downloader)"
+elif command -v wget >/dev/null 2>&1; then
+  echo "ok: wget found (downloader)"
+else
+  echo "FAIL: neither curl nor wget found - required to download the binary"
+  fail=1
+fi
+
+if command -v tar >/dev/null 2>&1; then
+  echo "ok: tar found"
+else
+  echo "FAIL: tar not found - required to extract the binary archive"
+  fail=1
+fi
+
+if [ -x "$WRAPPER" ]; then
+  echo "ok: wrapper executable: $WRAPPER"
+else
+  echo "FAIL: wrapper missing or not executable: $WRAPPER"
+  fail=1
+fi
+
+if mkdir -p "$STATE_DIR" 2>/dev/null && [ -w "$STATE_DIR" ]; then
+  echo "ok: install dir writable: $STATE_DIR"
+else
+  echo "FAIL: cannot create or write install dir: $STATE_DIR"
+  fail=1
+fi
+
+[ "$fail" -eq 0 ] || { echo "result: NOT READY - fix the failures above"; exit 1; }
+
+NUTRIENT_CLI="$STATE_DIR/cli/$BINARY_NAME"
+if [ -x "$NUTRIENT_CLI" ]; then
+  echo "ok: binary installed: $NUTRIENT_CLI ($("$NUTRIENT_CLI" --version 2>/dev/null || echo unknown version))"
+  echo "result: READY"
+  exit 0
+fi
+
+echo "note: binary not installed yet - first conversion downloads it (network required)"
+if [ "${1:-}" = "--install" ]; then
+  if "$WRAPPER" --version >/dev/null 2>&1; then
+    echo "ok: installed: $("$NUTRIENT_CLI" --version 2>/dev/null)"
+    echo "result: READY"
+    exit 0
+  fi
+  echo "FAIL: install failed - check network access to agent-cdn.nutrient.io"
+  exit 1
+fi
+
+echo "result: READY (binary will self-install on first run)"
+exit 0

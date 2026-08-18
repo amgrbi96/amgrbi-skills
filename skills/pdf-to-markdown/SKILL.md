@@ -15,6 +15,24 @@ Fast, local PDF → structured Markdown via Nutrient's CLI. Preserves headings, 
 - Platforms: `linux-amd64`, `linux-arm64`, `macos-arm64`. Intel Macs (Darwin/x86_64) are **unsupported** — the wrapper exits 1.
 - The underlying CLI is multi-command. The same wrapper also exposes `pdf-to-text` (layout-preserving plain text) and `query` (BM25 search over extracted `.md`/`.txt`). This skill only documents `pdf-to-markdown`.
 
+## Install & prerequisites
+
+Requirements: a supported platform (linux-amd64, linux-arm64, macos-arm64 — Intel Macs unsupported), `curl` **or** `wget`, `tar`, a writable `~/.local/share/nutrient/`, and network access to `agent-cdn.nutrient.io` on the first run (offline afterwards until the 6-hourly update check).
+
+Verify everything in one command:
+
+```bash
+$SKILL_DIR/bin/check-env
+```
+
+Exit 0 means ready; a missing binary is fine — the wrapper self-installs on the first conversion. To pre-download the binary instead (so batch jobs never hit the network mid-run):
+
+```bash
+$SKILL_DIR/bin/check-env --install   # ~40 s measured
+```
+
+What gets installed: the binary at `~/.local/share/nutrient/cli/nutrient-<platform>` plus a state file tracking the release for the 6-hourly update check. Uninstall = `rm -rf ~/.local/share/nutrient`.
+
 ## Usage
 
 Set `SKILL_DIR` to the absolute path of the directory containing this SKILL.md. Use `$SKILL_DIR/bin/pdf-to-markdown` in all commands below.
@@ -94,7 +112,7 @@ See the `parse-docs` router skill for the full decision tree.
 
 ## Performance
 
-Single small PDF: ~0.1–0.4 s. Batch mode converts in parallel. First run downloads the binary (a few seconds); subsequent runs use the cache and only hit the CDN every 6 hours.
+Single small PDF: ~0.1–0.4 s. Batch mode converts in parallel. First run downloads the binary (~40 s measured); subsequent runs use the cache and only hit the CDN every 6 hours.
 
 ## License
 

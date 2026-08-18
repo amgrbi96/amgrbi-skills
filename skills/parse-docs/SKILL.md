@@ -19,7 +19,7 @@ This skill routes document parsing jobs to one of four installed tools. Pick the
 | **Formulas** | None | None | None | LaTeX recognition |
 | **OCR** | None | None | Tesseract.js (built-in) | Cloud VLM (best) |
 | **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pg/day priority |
-| **Needs** | — | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + `MINERU_TOKEN` |
+| **Needs** | curl/wget + network (first run) | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + `MINERU_TOKEN` |
 
 Set `$SKILL_DIR` to the absolute path of **this** skill's directory (the one containing this SKILL.md). All four sibling skills resolve as `$SKILL_DIR/../<name>/`.
 
@@ -28,10 +28,10 @@ Set `$SKILL_DIR` to the absolute path of **this** skill's directory (the one con
 Before routing, confirm each tool the job might reach is present. Run these checks; install whatever is missing. A missing tool is **not** an error — route to an installed alternative, and tell the user what was skipped and why.
 
 ```bash
-# pdf-to-markdown — the binary should exist next door
-test -x "$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" \
+# pdf-to-markdown — full pre-flight (platform, curl/wget, tar, install state)
+"$SKILL_DIR/../pdf-to-markdown/bin/check-env" >/dev/null 2>&1 \
   && echo "pdf-to-markdown: ok" \
-  || echo "pdf-to-markdown: MISSING"
+  || echo "pdf-to-markdown: MISSING (run ../pdf-to-markdown/bin/check-env for details)"
 
 # pymupdf-pdf — script present + PyMuPDF importable
 test -f "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" \
@@ -70,7 +70,7 @@ Per-tool setup after install:
 
 | Tool | Extra step |
 |---|---|
-| `pdf-to-markdown` | None — the `bin/` wrapper self-installs the binary on first run |
+| `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
 | `pymupdf-pdf` | `pip install pymupdf pymupdf4llm` (see its `references/pymupdf-notes.md` for libstdc++ fixups) |
 | `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs); `brew install imagemagick` (images) |
 | `mineru` | `export MINERU_TOKEN=...` from https://mineru.net/user-center/api-token; `pip install requests aiohttp` |
