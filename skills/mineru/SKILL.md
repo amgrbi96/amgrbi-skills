@@ -29,14 +29,27 @@ This skill calls MinerU's **cloud web API** only (token-based). It never runs th
 
 1. Create one or more API tokens at https://mineru.net/user-center/api-token
 
-2. Provide tokens any of these ways (combined if several are present):
+2. Check prerequisites — Python **3.10+** (the script enforces this and exits with a clear error on older interpreters) and `requests`:
+
+```bash
+python3 --version                                                       # must be 3.10+
+python3 -c "import requests" 2>/dev/null && echo "requests: ok" || pip install -r requirements.txt
+```
+
+3. Provide tokens any of these ways (combined if several are present):
 
 ```bash
 export MINERU_TOKEN="single-token"            # one token
 export MINERU_TOKENS="token1,token2,token3"   # quota pool
 ```
 
-Or create `tokens.txt` in this skill's directory — one token per line, `#` comments allowed.
+Or create `tokens.txt` in this skill's directory — one token per line, `#` comments allowed (gitignored, never committed).
+
+4. Verify the whole setup offline (checks files, sizes, extensions, and tokens — no network, works even without `requests` installed):
+
+```bash
+python3 scripts/mineru_v2.py --dir ./docs/ --output ./output/ --dry-run
+```
 
 ## Quota Pooling (multi-token)
 
@@ -78,9 +91,7 @@ See the `parse-docs` router skill for full decision logic.
 
 ## Commands
 
-Requires `requests` (`pip install -r requirements.txt`). `--help` works without it; parsing exits with a clear error if it's missing.
-
-Always validate first — checks files, sizes, extensions, and tokens without network:
+Always validate first — the dry run checks files, sizes, extensions, and tokens with no network and no dependencies:
 
 ```bash
 python3 scripts/mineru_v2.py --dir ./docs/ --output ./output/ --dry-run
@@ -107,9 +118,11 @@ python3 scripts/mineru_v2.py \
 ```bash
 python3 scripts/mineru_v2.py \
   --dir ./pdfs/ \
-  --output "~/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/VaultName/" \
+  --output "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Obsidian/VaultName/" \
   --resume
 ```
+
+(`~` in `--output`/`--file`/`--dir` is expanded by the script itself, but quote it as `"$HOME/..."` in shells where tilde inside quotes stays literal.)
 
 ### Chinese Documents
 
@@ -133,20 +146,22 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 ## CLI Options
 
 ```
---dir PATH          Input directory (PDF/Word/PPT/images)
+--dir PATH          Input directory (PDF/Word/PPT/images); hidden dotfiles ignored
 --file PATH         Single file (mutually exclusive with --dir)
 --output PATH       Output directory (required)
---token TOKEN       API token (overrides env/file)
+--token TOKEN       Token placed first in the pool (env/file tokens still used)
 --tokens-file PATH  Read tokens from file, one per line (default: <skill>/tokens.txt)
---workers N         Concurrent workers (default: 5)
---resume            Skip already processed files
+--workers N         Concurrent workers, >= 1 (default: 5)
+--resume            Report already-processed files up front and drop them from the run
 --model MODEL       pipeline | vlm | MinerU-HTML (default: vlm)
 --language LANG     auto | en | ch (default: auto)
---pages RANGES      Page ranges, e.g. "1-10,15,20-30"
+--pages RANGES      Page ranges, e.g. "1-10,15,20-30" (validated; applies to every file with --dir)
 --no-formula        Disable formula recognition
 --no-table          Disable table extraction
---dry-run           Validate files and tokens, no network calls
+--dry-run           Validate files and tokens, no network, no dependencies
 ```
+
+**Idempotent by default:** a file whose output directory already exists is always skipped (⏭️, counted as success) so a re-run never re-spends quota. `--resume` additionally filters those files before the run starts and prints the skip count — use it after interruptions for accurate summaries.
 
 ## Model Version Guide
 
@@ -158,11 +173,12 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 
 ## Error Handling
 
-- 5× retry with exponential backoff — **only for retryable errors** (network, timeouts)
-- Non-retryable errors fail fast: bad params (`-500`), too large (`-60005`), too many pages (`-60006`, fix with `--pages`), region-blocked URL (`-60023`)
+- Up to 5 attempts per file with exponential backoff (1+2+4+8 s) for network errors, timeouts, and unrecognized API errors; token rotations (quota/invalid-token) never consume an attempt
+- Non-retryable errors fail fast, one attempt: bad params (`-500`), too large (`-60005`), too many pages (`-60006` — the error message includes a `--pages` suggestion), region-blocked URL (`-60023`)
 - Token errors rotate the pool (see Quota Pooling above)
 - Failed files listed in a JSON summary block at the end (machine-readable)
-- Exit code 0 only if every file succeeded; safe for scripting
+- Ctrl-C saves token state and exits 130 — re-run with `--resume` to continue
+- Exit codes: 0 success, 1 runtime failure (failed files / no token / bad input file / no network), 2 usage error (bad flag values) — safe for scripting
 
 ## Output Structure
 

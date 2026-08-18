@@ -73,7 +73,7 @@ Per-tool setup after install:
 | `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
 | `pymupdf-pdf` | `pip install pymupdf pymupdf4llm` (see its `references/pymupdf-notes.md` for libstdc++ fixups) |
 | `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs); `brew install imagemagick` (images) |
-| `mineru` | `export MINERU_TOKEN=...` from https://mineru.net/user-center/api-token; `pip install requests aiohttp` |
+| `mineru` | `export MINERU_TOKEN=...` from https://mineru.net/user-center/api-token; Python 3.10+ and `pip install requests` (verify with the script's `--dry-run`) |
 
 ## Decision Tree
 
