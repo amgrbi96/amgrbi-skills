@@ -16,15 +16,38 @@ All commands and outputs below were **verified Aug 2026** against `@llamaindex/l
 
 ## Setup
 
-```bash
-npm i -g @llamaindex/liteparse   # installs the `lit` CLI (and `liteparse` alias)
-npm ls -g @llamaindex/liteparse  # verify — `lit --version` prints a hardcoded 2.0.0
+Run the pre-flight first, then install only what is missing for the formats at hand. Images and PDFs need nothing beyond the CLI; Office formats additionally need LibreOffice.
 
-brew install --cask libreoffice  # macOS — required for DOCX/PPTX/XLSX/ODT (≈700 MB)
-# Ubuntu/Debian: apt-get install libreoffice
+### Pre-flight (run before parsing)
+
+```bash
+node --version                                 # must be v18+
+command -v lit >/dev/null 2>&1 && echo "lit: ok" || echo "lit: MISSING"
+command -v soffice >/dev/null 2>&1 && echo "libreoffice: ok" || echo "libreoffice: MISSING (only needed for Office formats)"
 ```
 
-Images (PNG/JPEG/TIFF) parse natively — no ImageMagick needed (verified: works with ImageMagick off PATH).
+### Install
+
+1. **CLI — always required:**
+
+```bash
+npm i -g @llamaindex/liteparse
+lit parse --help >/dev/null && echo "install ok"
+```
+
+`lit parse --help` is the right verification: it loads the native platform binary at startup and fails loudly if the install is broken. Don't use `lit --version` — it prints a hardcoded `2.0.0` regardless of the installed package.
+
+2. **LibreOffice — only for Office formats (DOCX/PPTX/XLSX/ODT/RTF/CSV):** ~700 MB, so skip it when the task only touches PDFs or images. If it's missing, Office files fail immediately with a clear exit-1 error listing these same commands; PDFs and images are unaffected.
+
+```bash
+brew install --cask libreoffice     # macOS
+sudo apt-get install libreoffice    # Ubuntu/Debian
+choco install libreoffice-fresh     # Windows
+```
+
+Verify with `command -v soffice`.
+
+3. **OCR data — automatic, needs network once per language:** the first OCR run downloads Tesseract data (~45 s; cached at `~/Library/Application Support/tesseract-rs/tessdata/` on macOS). For offline machines, pre-seed a tessdata directory and point the config file's `tessdataPath` at it.
 
 ## When to Use This vs. Other Parsers
 
