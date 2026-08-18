@@ -1,180 +1,201 @@
 ---
 name: liteparse
-description: Use this skill when the user asks to parse, perform multi-format document conversion or spatially extract text from an unstructured file (PDF, DOCX, PPTX, XLSX, images, etc.) locally without cloud dependencies.
-compatibility: Requires Node 18+ and `@llamaindex/liteparse` installed globally via npm (`npm i -g @llamaindex/liteparse`)
+description: Parse PDFs, Office documents (DOCX/PPTX/XLSX/ODT), and images locally into text, Markdown, or JSON with bounding boxes and OCR confidence — no cloud, no LLM, nothing leaves the machine. Use when the user wants local/offline/private document parsing or OCR (scanned PDFs, photos, screenshots), spatial text coordinates, page screenshots, or batch conversion of mixed-format folders — even casually ("grab the text from this", "read this image", "what does this scan say"). If the user needs highest accuracy (formulas, complex layouts, degraded scans) and cloud is acceptable, route to mineru instead.
+compatibility: 'Node 18+; `npm i -g @llamaindex/liteparse` (bin: `lit`; verified against npm 2.13.1 — `lit --version` misleadingly prints a hardcoded 2.0.0, don't use it for install checks). LibreOffice required for Office formats.'
 license: MIT
 metadata:
   author: LlamaIndex
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
-# LiteParse Skill
+# LiteParse (`lit` CLI)
 
-Parse unstructured documents (PDF, DOCX, PPTX, XLSX, images, and more) locally with LiteParse: fast, lightweight, no cloud dependencies or LLM required.
+Parse unstructured documents (PDF, DOCX, PPTX, XLSX, images) locally with LiteParse: fast, no cloud dependencies, no LLM. Output text, Markdown, or structured JSON with per-item bounding boxes and OCR confidence.
+
+All commands and outputs below were **verified Aug 2026** against `@llamaindex/liteparse` 2.13.1 on macOS arm64.
 
 ## Setup
 
-If `lit` is not on PATH, install it and its format dependencies:
-
 ```bash
-npm i -g @llamaindex/liteparse   # the CLI
-lit --version                    # verify
+npm i -g @llamaindex/liteparse   # installs the `lit` CLI (and `liteparse` alias)
+npm ls -g @llamaindex/liteparse  # verify — `lit --version` prints a hardcoded 2.0.0
 
-# Optional, only for the formats noted:
-brew install --cask libreoffice   # macOS — DOCX/PPTX/XLSX
-brew install imagemagick          # macOS — images
-# Ubuntu/Debian: apt-get install libreoffice imagemagick
+brew install --cask libreoffice  # macOS — required for DOCX/PPTX/XLSX/ODT (≈700 MB)
+# Ubuntu/Debian: apt-get install libreoffice
 ```
 
----
+Images (PNG/JPEG/TIFF) parse natively — no ImageMagick needed (verified: works with ImageMagick off PATH).
 
-## Step 1 — Produce the CLI Command or Script
+## When to Use This vs. Other Parsers
 
-### Parse a Single File
+| Need | Tool |
+|---|---|
+| Local/private/offline multi-format parsing + OCR | **liteparse** (this skill) |
+| Highest accuracy — formulas, multi-column academic, handwriting, degraded scans | `mineru` (cloud VLM, token required, 200 MB / 200 pages / 1000 pages/day per token) |
+| Fast local PDF → Markdown (no OCR, no office formats) | `pdf-to-markdown` or `pymupdf-pdf` |
+
+**Route to mineru when:** OCR output comes back empty or garbled (see Limits), the document has LaTeX formulas or complex multi-column layout, or the user explicitly wants maximum accuracy and accepts a cloud round-trip.
+
+See the `parse-docs` router skill for full decision logic.
+
+## Supported Input Formats
+
+| Category | Formats | Requirement |
+|----------|---------|-------------|
+| PDF | `.pdf` (incl. password-protected via `--password`) | none |
+| Word | `.docx`, `.docm`, `.odt`, `.rtf` | LibreOffice |
+| PowerPoint | `.pptx`, `.pptm`, `.odp` | LibreOffice |
+| Spreadsheets | `.xlsx`, `.xlsm`, `.ods`, `.csv`, `.tsv` | LibreOffice |
+| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.webp`, `.svg` | none |
+
+Office documents are converted to PDF via LibreOffice first, then parsed. Anything else fails fast: `Error: conversion error: unsupported file format: .txt`, exit 1.
+
+## Commands
+
+### Single File → Text (default)
 
 ```bash
-# Basic text extraction
 lit parse document.pdf
+```
+```text
+[liteparse] extract: 9.2ms (1 pages)
+[liteparse] ocr render: 4.7ms (1 pages)
+[liteparse] ocr: 289.0ms
+...
+Invoice 2026-08-19
 
-# JSON output saved to a file
+Total due: 142.50 USD
+```
+
+Add `-q`/`--quiet` to suppress the `[liteparse]` timing lines on stderr. Read from stdin with `lit parse -` (e.g. `curl -sL url/file.pdf | lit parse -`).
+
+### Markdown (headings, lists, tables, links)
+
+```bash
+lit parse document.pdf --format markdown
+```
+
+### JSON with Bounding Boxes
+
+```bash
 lit parse document.pdf --format json -o output.json
+```
 
-# Specific page range
+Output structure (verified):
+
+```json
+{
+  "pages": [
+    {
+      "page": 1,
+      "width": 384,
+      "height": 144,
+      "text": "Invoice 2026-08-19  Total due: 142.50 USD",
+      "text_items": [
+        {
+          "text": "Invoice 2026-08-19",
+          "x": 20.6, "y": 32.2, "width": 145.4, "height": 12.5,
+          "font_name": "OCR",
+          "font_size": 12.5,
+          "confidence": 0.962
+        }
+      ]
+    }
+  ]
+}
+```
+
+Optional JSON extras (each adds fields): `--extract-images` (+`--image-output-dir <dir>` to write bytes), `--extract-annotations`, `--extract-form-fields`, `--extract-blocks`, `--extract-structure-tree`, `--extract-vector-graphics`, `--extract-text-metadata`, `--complexity`.
+
+### Pre-flight: Does This File Need OCR?
+
+`is-complex` is a cheap text-layer-only pass — use it to decide between `--no-ocr` (fast path) and full OCR:
+
+```bash
+lit is-complex scan.png
+```
+```json
+[
+  {
+    "pageNumber": 1,
+    "textLength": 0,
+    "needsOcr": true,
+    "reasons": ["scanned"],
+    "layout": { "columnCount": 1, "isComplex": false, "reasons": [] }
+  }
+]
+```
+
+Reasons: `scanned`, `no-text`, `sparse-text`, `embedded-images`, `garbled`, `vector-text`, `annotation-text`. Caveat (verified): it is conservative — a short text-layer memo flags `sparse-text`/`needsOcr: true` even when the text layer is fine. Check `textLength` before routing; don't blindly trust the flag.
+
+### Page Ranges, No-OCR, DPI
+
+```bash
 lit parse document.pdf --target-pages "1-5,10,15-20"
-
-# Disable OCR (faster, text-only PDFs)
-lit parse document.pdf --no-ocr
-
-# Use an external HTTP OCR server for higher accuracy
-lit parse document.pdf --ocr-server-url http://localhost:8828/ocr
-
-# Higher DPI for better quality
-lit parse document.pdf --dpi 300
+lit parse document.pdf --max-pages 50          # hard limit (default: 1000)
+lit parse document.pdf --no-ocr                # text-layer PDFs — much faster
+lit parse document.pdf --ocr-language fra      # Tesseract code; default eng
+lit parse document.pdf --dpi 300               # default 150
+lit parse document.pdf --password secret       # encrypted documents
 ```
 
-### Batch Parse a Directory
+### External OCR Server (higher accuracy than built-in Tesseract)
 
 ```bash
-lit batch-parse ./input-directory ./output-directory
-
-# Only process PDFs, recursively
-lit batch-parse ./input ./output --extension .pdf --recursive
+lit parse document.pdf --ocr-server-url http://localhost:8828/ocr \
+  --ocr-server-header "Authorization: Bearer tkn"
 ```
 
-### Generate Page Screenshots
+The server implements `POST /ocr` taking `file` (multipart) + `language`, returning `{"results": [{"text": "Hello", "bbox": [x1, y1, x2, y2], "confidence": 0.98}]}`.
 
-Screenshots are useful for LLM agents that need to see visual layout.
+### Screenshots (for vision-capable agents)
 
 ```bash
-# All pages
-lit screenshot document.pdf -o ./screenshots
-
-# Specific pages
-lit screenshot document.pdf --pages "1,3,5" -o ./screenshots
-
-# High-DPI PNG
-lit screenshot document.pdf --dpi 300 --format png -o ./screenshots
-
-# Page range
-lit screenshot document.pdf --pages "1-10" -o ./screenshots
+lit screenshot document.pdf -o ./screenshots          # writes page_1.png, page_2.png, ...
+lit screenshot document.pdf --target-pages "1,3,5" -o ./screenshots
 ```
 
----
+### Batch Directory
 
-## Step 2 — Key Options Reference
-
-### OCR Options
-
-| Option | Description |
-|--------|-------------|
-| (default) | Tesseract.js — zero setup, built-in |
-| `--ocr-language fra` | Set OCR language (ISO code) |
-| `--ocr-server-url <url>` | Use external HTTP OCR server (EasyOCR, PaddleOCR, custom) |
-| `--no-ocr` | Disable OCR entirely |
-
-### Output Options
-
-| Option | Description |
-|--------|-------------|
-| `--format json` | Structured JSON with bounding boxes |
-| `--format text` | Plain text (default) |
-| `-o <file>` | Save output to file |
-
-### Performance / Quality Options
-
-| Option | Description |
-|--------|-------------|
-| `--dpi <n>` | Rendering DPI (default: 150; use 300 for high quality) |
-| `--max-pages <n>` | Limit pages parsed |
-| `--target-pages <pages>` | Parse specific pages (e.g. `"1-5,10"`) |
-| `--no-precise-bbox` | Disable precise bounding boxes (faster) |
-| `--skip-diagonal-text` | Ignore rotated/diagonal text |
-| `--preserve-small-text` | Keep very small text that would otherwise be dropped |
-
----
-
-## Step 3 — Using a Config File
-
-For repeated use with consistent options, generate a `liteparse.config.json`:
-
-```json
-{
-  "ocrLanguage": "en",
-  "ocrEnabled": true,
-  "maxPages": 1000,
-  "dpi": 150,
-  "outputFormat": "json",
-  "preciseBoundingBox": true,
-  "skipDiagonalText": false,
-  "preserveVerySmallText": false
-}
+```bash
+lit batch-parse ./input ./output --recursive            # → "batch complete: 2 succeeded, 0 failed"
+lit batch-parse ./input ./output --extension .pdf --format markdown
 ```
 
-For an HTTP OCR server:
+Writes one file per input named `<stem>.<txt|json|md>` directly in the output dir — **files with the same stem overwrite each other** (verified: `a.docx` and `a.png` both produce `a.txt`). Keep stems unique in batch inputs.
 
-```json
-{
-  "ocrServerUrl": "http://localhost:8828/ocr",
-  "ocrLanguage": "en",
-  "outputFormat": "json"
-}
-```
+## Config File
 
-Use with:
+For repeated use, pass a JSON config with Node-API camelCase keys (verified in CLI source — snake_case does **not** work here):
 
 ```bash
 lit parse document.pdf --config liteparse.config.json
 ```
 
----
-
-## Step 4 — HTTP OCR Server API (Advanced)
-
-If the user wants to plug in a custom OCR backend, the server must implement:
-
-- **Endpoint**: `POST /ocr`
-- **Accepts**: `file` (multipart) and `language` (string) parameters
-- **Returns**:
 ```json
 {
-  "results": [
-    { "text": "Hello", "bbox": [x1, y1, x2, y2], "confidence": 0.98 }
-  ]
+  "ocrEnabled": true,
+  "ocrLanguage": "eng",
+  "maxPages": 1000,
+  "dpi": 150,
+  "outputFormat": "json",
+  "numWorkers": 4,
+  "preserveVerySmallText": false,
+  "continueOnPageError": false
 }
 ```
 
-Ready-to-use wrappers exist for EasyOCR and PaddleOCR in the LiteParse repo.
+CLI flags override config-file values. Valid keys include everything above plus `ocrServerUrl`, `ocrServerHeaders`, `targetPages`, `password`, `quiet`, `skipDiagonalText` (config-only; no CLI flag).
 
----
+## Limits (verified Aug 2026)
 
-## Supported Input Formats
-
-| Category | Formats |
-|----------|---------|
-| PDF | `.pdf` |
-| Word | `.doc`, `.docx`, `.docm`, `.odt`, `.rtf` |
-| PowerPoint | `.ppt`, `.pptx`, `.pptm`, `.odp` |
-| Spreadsheets | `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.csv`, `.tsv` |
-| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.webp`, `.svg` |
-
-Office documents require LibreOffice; images require ImageMagick. LiteParse auto-converts these formats to PDF before parsing.
+| Limit | Detail |
+|---|---|
+| **Silent empty OCR** | Degraded/rotated/blurred images can exit **0** with `Empty page!!` on stderr and empty `text_items` (verified with a blurred JPEG). Always check output is non-empty; if empty → re-try higher `--dpi`, another language, or route to `mineru`. |
+| First OCR run per language | Downloads Tesseract data: ~45 s cold vs ~0.3 s warm per small page (verified). Not a hang — wait it out. |
+| Office conversion overhead | LibreOffice adds ~4 s/file warm, ~15 s on first conversion after install. |
+| Missing LibreOffice | Clear error + exit 1 (no silent fail): tells you the exact brew/apt/choco command. |
+| OCR quality | Built-in Tesseract is fine for clean prints; weak on handwriting, dense low-DPI scans, heavy skew. Use an external OCR server or mineru for those. |
+| Markdown fidelity | Reconstruction varies; office-converted docs can collapse paragraph breaks into one line (verified). Prefer `--format text` for fidelity, `markdown` for LLM ingestion of clean PDFs. |
+| Max pages | Default 1000 (`--max-pages` to change). |
+| Version reporting | `lit --version` prints hardcoded `2.0.0`; check `npm ls -g @llamaindex/liteparse` for the real package version. |
