@@ -1,17 +1,17 @@
 ---
 name: pdf-tools
-description: 'PDF engineering for generation, modification, form filling, and security. Use when generating PDFs with Puppeteer, modifying/merging/splitting PDFs with pdf-lib, filling PDF forms, or implementing PDF security (encrypt/sign/redact). Use for HTML-to-PDF conversion and document processing pipelines. NOT for content extraction — use the parse-docs skill for that.'
+description: 'PDF engineering for generation, modification, form filling, and security. Use when generating PDFs with Puppeteer, modifying/merging/splitting PDFs with pdf-lib, filling PDF forms, implementing PDF security (encrypt/sign/redact), organizing pages (rotate/crop/extract/bookmarks), watermarking or stamping existing PDFs, embedding/extracting images, or compressing PDFs. Use for HTML-to-PDF conversion and document processing pipelines. NOT for content extraction — use the parse-docs skill for that.'
 license: MIT
 metadata:
   author: oakoss
-  version: '1.3'
+  version: '1.4'
 ---
 
 # PDF Tools
 
-Full-lifecycle PDF engineering covering generation, modification, form filling, and security. Prioritizes JavaScript-first solutions (pdf-lib, unpdf, Puppeteer) with Python/CLI utilities for advanced scenarios.
+Full-lifecycle PDF engineering covering generation, modification, form filling, security, and page organization. Prioritizes JavaScript-first solutions (pdf-lib, unpdf, Puppeteer) with Python/CLI utilities for advanced scenarios.
 
-**When to use**: Generating pixel-perfect PDFs from HTML/React, modifying existing PDFs, filling forms (fillable or non-fillable), securing documents (encrypt/sign/redact), or repairing PDFs.
+**When to use**: Generating pixel-perfect PDFs from HTML/React, modifying existing PDFs, filling forms (fillable or non-fillable), securing documents (encrypt/sign/redact), organizing pages (rotate/crop/extract/bookmarks), watermarking or stamping, handling embedded images, or repairing PDFs.
 
 **When NOT to use**:
 - **Content extraction** (text, tables, OCR, Markdown) → use the `parse-docs` skill, which routes to `pdf-to-markdown`, `pymupdf-pdf`, `liteparse`, or `mineru`.
@@ -77,6 +77,13 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 | Encrypt PDF                | qpdf                          | AES-256: `qpdf --encrypt user owner 256 --`                                |
 | Repair corrupted PDF       | qpdf                          | `qpdf input.pdf --replace-input`                                           |
 | Merge thousands of files   | pypdf (Python)                | Lighter than headless browser                                              |
+| Rotate, delete, crop pages | pdf-lib                       | `setRotation(degrees(90))`, `removePage`, `setCropBox`                     |
+| Extract page subset        | pdf-lib                       | `copyPages(src, indices)` into a new document                              |
+| Bookmarks / outlines       | pypdf                         | `writer.add_outline_item(title, page, parent)`                             |
+| Watermark / page numbers   | pdf-lib                       | `drawText` with `opacity` looped over pages                                |
+| Stamp from another PDF     | pymupdf                       | `show_pdf_page` places a stamp/seal page                                   |
+| Embed / extract images     | pdf-lib / pymupdf             | `embedPng`; `get_images` + `Pixmap`                                        |
+| Compress PDF               | ghostscript                   | `-dPDFSETTINGS=/ebook` downsamples to 150 dpi                              |
 | Batch queue processing     | BullMQ + unpdf                | Redis-backed with retry, concurrency, progress tracking                    |
 | PDF/A archival compliance  | ghostscript + verapdf         | `gs -dPDFA=2` for conversion; verapdf for validation                       |
 | Tagged PDF (accessibility) | Puppeteer                     | `tagged: true` maps HTML semantics to PDF structure tags                   |
@@ -110,5 +117,8 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 
 - [High-Fidelity Generation](references/high-fidelity-generation.md) -- Puppeteer HTML-to-PDF, CSS print tips, React templates, browser pooling
 - [Legacy Utilities](references/legacy-utilities.md) -- pdfplumber, pypdf, qpdf, poppler-utils for batch and forensic tasks
+- [Page Operations](references/page-operations.md) -- Rotate/delete/crop/extract pages, bookmarks, links, attachments, linearize, decrypt
+- [Watermarking and Overlays](references/watermarking-and-overlays.md) -- Watermarks, page numbers on existing PDFs, stamping pages from other documents
+- [Images and Optimization](references/images-and-optimization.md) -- Embed/extract images, render pages, thumbnails, compression
 - [Form Filling](references/form-filling.md) -- Fillable field extraction, non-fillable annotation workflow, validation scripts
 - [Batch Processing and Accessibility](references/batch-and-accessibility.md) -- Queue-based batch processing, PDF/A compliance, tagged PDFs, digital signatures, comparison, redaction
