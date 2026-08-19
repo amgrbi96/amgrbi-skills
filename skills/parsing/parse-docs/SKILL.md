@@ -257,8 +257,10 @@ python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./
 # 2. Single file (default model is vlm — slowest, most accurate)
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/
 
-# Long documents (>200 pages) — page ranges
+# Long documents (>200 pages) — one command per range, shared --output;
+# each range lands in its own folder: output/BIG-1-200/, output/BIG-201-400/, …
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file BIG.pdf --output ./output/ --pages 1-200
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file BIG.pdf --output ./output/ --pages 201-400
 
 # Faster model for standard docs
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --model pipeline
@@ -269,11 +271,14 @@ python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --dir INPUT_DIR/ --output ./
 # Token health (read-only API check, zero page spend — no --file/--output needed)
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --check-token
 
-# Undecided on model? Sample-parse first 3 pages with BOTH models (~6 pages/file)
-python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --probe
+# Undecided on model? Sample-parse pages with BOTH models (~6 pages), or point
+# it at known-hard pages, or probe a single model:
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./probe/ --probe
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./probe/ --probe --probe-pages "85-87,203"
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./probe/ --probe --model MinerU-HTML
 ```
 
-Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). The script warns before wasting quota (text-layer PDFs, >200-page files, over-budget batches) and never re-parses an existing output dir. Output: `output/<stem>/<stem>.md` + `images/` (+ `.docx/.html/.latex` with `--extra-formats`). Exit 1 on any failure.
+Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). The script warns before wasting quota (text-layer PDFs, >200-page files, over-budget batches) and never re-parses an existing output dir. Output: `output/<stem>/<stem>.md` + `images/` (+ `.docx/.html/.latex` with `--extra-formats`); with `--pages`, one folder per range (`output/<stem>-1-200/`). Probe output: `output/<stem>-probe/<model>/<stem>/<stem>.md`. Exit 1 on any failure.
 
 ## Mode 2 — Folder (batch with per-file routing)
 
