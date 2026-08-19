@@ -1,25 +1,33 @@
 ---
 name: parse-docs
-description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. Use this skill before parsing any document (PDF, DOCX, PPTX, XLSX, images) — it checks which tools are installed and routes to the best fit. Use when the user mentions parsing, extracting text, converting a document, OCR, tables, drug dosing data, or batch processing — even casually ("grab the text", "read this", "pull content from").'
+description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. Three modes: single document (decision tree), folder batch (per-file routing + resume), or all-methods (every applicable tool per document). Use this skill before parsing any document (PDF, DOCX, PPTX, XLSX, images) — it checks which tools are installed and routes to the best fit. Use when the user mentions parsing, extracting text, converting a document, OCR, tables, drug dosing data, or batch processing — even casually ("grab the text", "read this", "pull content from").'
 ---
 
-# Parse Docs — Smart Document Router
+# Parse Docs — Document Router
 
-This skill routes document parsing jobs to one of four installed tools. Pick the first rule in the decision tree that matches; the four tools here are the complete set.
+Routes parsing jobs to one of four installed tools. Pick a mode, then follow its section.
+
+| Mode | What it does | How |
+|---|---|---|
+| **Single** (default) | Route one document via the decision tree | documented commands below |
+| **Folder** | Route each file in a directory independently; resume-safe batch | `scripts/parse_folder.py --mode folder` |
+| **All-methods** | Run every applicable tool on each document | `scripts/parse_folder.py --mode all` |
+
+Folder and all-methods use the orchestration script because the per-document output layout (`output/<doc>/<tool>/`) and per-file routing can't be expressed with the tools' native flags alone.
 
 ## The Four Tools
 
 | | pdf-to-markdown | pymupdf-pdf | liteparse | mineru |
 |---|---|---|---|---|
 | **Binary** | `$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown` | `$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py` | `lit` (global CLI) | `$SKILL_DIR/../mineru/scripts/mineru_v2.py` |
-| **Formats** | PDF only | PDF only | PDF, DOCX, PPTX, XLSX, images | PDF, DOCX, PPTX, images |
-| **Output** | Structured Markdown | Markdown / JSON / images / tables | Text or JSON + bounding boxes | Markdown + images + metadata |
-| **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast (local) | 🐢 ~0.030s/pg | 🐢 Slowest (cloud round-trip) |
+| **Formats** | PDF only | PDF only | PDF, DOCX/ODT/RTF, PPTX/ODP, XLSX/ODS/CSV, jpg/png/gif/bmp/tiff/webp/svg | PDF, DOCX, PPTX, jpg/jpeg/png **only** |
+| **Output** | Structured Markdown | Markdown / JSON / images / tables | Text/Markdown/JSON + bounding boxes | Markdown + images + metadata |
+| **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast (local) | 🐢 ~0.03s/pg text-layer; OCR adds ~0.3s/pg | 🐢 Slowest (cloud round-trip) |
 | **Tables** | HTML tables, columns preserved | Rough line-based JSON | Preserves cell-to-value mappings | Best (VLM) |
 | **Formulas** | None | None | None | LaTeX recognition |
 | **OCR** | None | None | Tesseract.js (built-in) | Cloud VLM (best) |
-| **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pg/day priority |
-| **Needs** | curl/wget + network (first run) | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + `MINERU_TOKEN` |
+| **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pages/day **per token** (poolable) |
+| **Needs** | curl/wget + network (first run) | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + token + Python 3.10+ + `requests` |
 
 Set `$SKILL_DIR` to the absolute path of **this** skill's directory (the one containing this SKILL.md). All four sibling skills resolve as `$SKILL_DIR/../<name>/`.
 
@@ -39,16 +47,23 @@ test -f "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" \
   && echo "pymupdf-pdf: ok" \
   || echo "pymupdf-pdf: MISSING (script or PyMuPDF)"
 
-# liteparse — the `lit` CLI on PATH
+# liteparse — the `lit` CLI on PATH (`lit --version` is unreliable; this is the right check)
 command -v lit >/dev/null 2>&1 \
   && echo "liteparse: ok" \
   || echo "liteparse: MISSING"
 
-# mineru — script present + token set
+# mineru — script + Python 3.10+ + a token from ANY source (env pool, single env, or tokens.txt)
 test -f "$SKILL_DIR/../mineru/scripts/mineru_v2.py" \
-  && test -n "$MINERU_TOKEN" \
+  && python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" \
+  && { test -n "$MINERU_TOKEN$MINERU_TOKENS" || test -f "$SKILL_DIR/../mineru/tokens.txt"; } \
   && echo "mineru: ok" \
-  || echo "mineru: MISSING (script or MINERU_TOKEN)"
+  || echo "mineru: MISSING (script, Python 3.10+, or no token in MINERU_TOKEN/MINERU_TOKENS/tokens.txt)"
+```
+
+For a definitive mineru check on real inputs, use its offline dry run (no network, no `requests` needed):
+
+```bash
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --dry-run
 ```
 
 ### Installing a missing tool
@@ -71,20 +86,22 @@ Per-tool setup after install:
 | Tool | Extra step |
 |---|---|
 | `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
-| `pymupdf-pdf` | `pip install pymupdf pymupdf4llm` (see its `references/pymupdf-notes.md` for libstdc++ fixups) |
-| `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs); `brew install imagemagick` (images) |
-| `mineru` | `export MINERU_TOKEN=...` from https://mineru.net/user-center/api-token; Python 3.10+ and `pip install requests` (verify with the script's `--dry-run`) |
+| `pymupdf-pdf` | `pip install pymupdf` (`pymupdf4llm` only for the layout addon; see its `references/pymupdf-notes.md`) |
+| `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs) |
+| `mineru` | Token from https://mineru.net/user-center/api-token into `MINERU_TOKEN`, `MINERU_TOKENS` (pool), or `mineru/tokens.txt`; `pip install requests`; Python 3.10+ |
 
-## Decision Tree
+## Mode 1 — Single document (default)
 
-Walk top to bottom. First match wins.
+Walk the decision tree top to bottom; first match wins. Then run the tool directly with the commands under "Running the chosen tool".
 
 ### 1. Non-PDF files → liteparse or mineru
 
 ```
-Extension is .docx, .pptx, .xlsx, .doc, .odt, .jpg, .png, .tiff, etc.
-→ liteparse (local, fast enough)
-→ mineru if formulas or highest accuracy matter (cloud)
+Extension is .docx, .pptx, .jpg, .jpeg, .png
+→ liteparse (local, fast enough) — mineru if formulas or highest accuracy matter
+
+Extension is .xlsx, .odt, .rtf, .csv, .tiff, .gif, .webp, …
+→ liteparse ONLY (mineru rejects these extensions in pre-flight)
 ```
 
 ### 2. Scanned PDF / image / OCR needed → mineru or liteparse
@@ -106,14 +123,15 @@ Document has equations, chemical formulas, math notation
 
 ```
 Multi-column academic papers, posters, mixed content
-→ mineru with --model vlm
+→ mineru (its default model is already vlm — no flag needed)
 ```
 
 ### 5. Need local layout detection (tables/images/headers as boxes) → pymupdf-pdf
 
 ```
 User wants bounding boxes, block-level layout, or to crop table/figure regions
-→ pymupdf-pdf (uses pymupdf.layout addon — local, GNN-based)
+→ pymupdf-pdf layout addon (pymupdf.layout — local, GNN-based, Python API;
+  the parse script itself does not emit boxes — see the pymupdf-pdf SKILL.md)
 ```
 
 ### 6. Need accurate table data (drug doses, criteria, structured tables) → liteparse or mineru
@@ -128,8 +146,9 @@ Tables where cell-to-value mapping matters (clinical dosing, criteria lists)
 
 ```
 "JSON output", "coordinates", "spatial extraction"
-→ liteparse --format json (text + bboxes)
-→ pymupdf-pdf --format json (layout boxes via pymupdf.layout)
+→ liteparse --format json (text + per-item bboxes + OCR confidence)
+→ pymupdf-pdf --format json (plain per-page text JSON — NOT boxes;
+  for layout boxes use the pymupdf.layout addon API)
 ```
 
 ### 8. User explicitly wants Markdown, fast → pdf-to-markdown
@@ -139,15 +158,11 @@ Tables where cell-to-value mapping matters (clinical dosing, criteria lists)
 → pdf-to-markdown (fastest)
 ```
 
-### 9. Batch processing many PDFs → pdf-to-markdown or mineru
+### 9. Batch processing many files → Folder mode (below)
 
 ```
-Folder of many PDFs, speed matters, no tables/formulas
-→ pdf-to-markdown (150× faster in batch)
-
-Folder with tables/dosing/formulas, accuracy matters
-→ mineru with --workers 10 --resume (cloud, slower but accurate)
-→ Warn: pdf-to-markdown on table-heavy batches will break cell relationships
+Folder of documents to parse
+→ Mode 2 (one tool per file) or Mode 3 (every tool per file)
 ```
 
 ### 10. Hybrid: full text + accurate tables → pdf-to-markdown + liteparse/mineru
@@ -173,71 +188,154 @@ Can't determine intent from context
 → "Do you need exact tables/formulas (mineru/liteparse), or is fast text enough (pdf-to-markdown)?"
 ```
 
-## Running the Chosen Tool
+### Running the chosen tool
 
-Once decided, run the command directly from this file — the routing above replaces loading each tool's own SKILL.md.
-
-### pdf-to-markdown
+#### pdf-to-markdown
 
 ```bash
 # Single file
 "$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" INPUT.pdf OUTPUT.md
 
-# Batch
-"$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" INPUT_DIR/ OUTPUT_DIR/
-
 # With images
 "$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" --enable-image-export INPUT.pdf OUTPUT.md
+
+# Batch (native — converts every file in the dir in parallel, no extension filter)
+"$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown" INPUT_DIR/ OUTPUT_DIR/
 ```
 
-### pymupdf-pdf
+Always verify: `test -s OUTPUT.md || echo "empty — likely scanned; reroute to mineru/liteparse"`.
+
+#### pymupdf-pdf
 
 ```bash
+# Validate first (no output written)
+python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --dry-run
+
 # Single PDF → Markdown (default)
 python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --format md --outroot ./output
 
-# JSON output
+# JSON / images + tables
 python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --format json --outroot ./output
-
-# With images + tables
 python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --images --tables --outroot ./output
 ```
 
-For layout detection (`pymupdf.layout` addon — block-level boxes), see the pymupdf-pdf SKILL.md.
+Output lands in `./output/<pdf-stem>/` (`output.md`, `output.json`, `images/`, `tables.json`). Layout boxes are a separate Python API — see the pymupdf-pdf SKILL.md.
 
-### liteparse
+#### liteparse
 
 ```bash
 # Single file → text
 lit parse INPUT.pdf -o OUTPUT.txt
 
-# JSON with bounding boxes
+# Markdown / JSON with bounding boxes
+lit parse INPUT.pdf --format markdown -o OUTPUT.md
 lit parse INPUT.pdf --format json -o OUTPUT.json
 
-# Specific pages
+# Specific pages / image OCR
 lit parse INPUT.pdf --target-pages "1-5,10,15-20" -o OUTPUT.txt
-
-# Image OCR
 lit parse INPUT.jpg -o OUTPUT.txt
 
-# Batch
+# Batch (native — ⚠ same-stem files overwrite each other)
 lit batch-parse INPUT_DIR/ OUTPUT_DIR/ --extension .pdf
 ```
 
-### mineru
+#### mineru
 
 ```bash
-# Single file
+# 1. ALWAYS validate first — offline, no deps, checks files + token pool
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --dry-run
+
+# 2. Single file (default model is vlm — slowest, most accurate)
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/
 
-# Batch with resume
-python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --dir INPUT_DIR/ --output ./output/ --workers 10 --resume
+# Long documents (>200 pages) — page ranges
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file BIG.pdf --output ./output/ --pages 1-200
 
-# Complex layout (VLM, slowest/most accurate)
-python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --model vlm
+# Faster model for standard docs
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --model pipeline
+
+# Batch with resume (native)
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --dir INPUT_DIR/ --output ./output/ --workers 10 --resume
 ```
 
-Requires `MINERU_TOKEN` env var. Limits: 200 MB / 200 pages per file, 1000 pages/day priority.
+Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). Output: `output/<stem>/<stem>.md` + `images/`. Exit 1 on any failure.
+
+## Mode 2 — Folder (batch with per-file routing)
+
+One run over a directory: each file is typed and routed independently (a `.docx` and a `.pdf` in the same folder go to different tools), outputs land per document, and re-runs skip finished work.
+
+```bash
+# Plan first — no files touched
+python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder --dry-run
+
+# Run (speed: PDFs → pdf-to-markdown, everything else → liteparse)
+python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder
+
+# Run (accuracy: mineru-first for its formats — requires --mineru + tokens)
+python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder --prefer accuracy --mineru
+```
+
+Behavior:
+
+- **Routing**: `.pdf` → pdf-to-markdown (speed) or mineru (accuracy); `.docx/.pptx/.jpg/.jpeg/.png` → liteparse (speed) or mineru (accuracy); liteparse-only formats (`.xlsx/.odt/.tiff/…`) → liteparse; anything else is listed as unroutable.
+- **Missing tools** are skipped with a note; files route to what's installed.
+- **Scanned-PDF fallback**: if pdf-to-markdown produces empty output (scanned PDF, exit 0 + ~2 bytes), the file is automatically re-run through liteparse OCR.
+- **Resume**: re-running skips any doc+tool whose output already exists (see table below). mineru quota is never re-spent.
+- **mineru**: only runs with `--mineru` AND tokens configured; the script prints the quota cost (file count, counted PDF pages, tokens × 1000 pages/day) before parsing.
+
+Output layout — one dir per document, one subdir per tool:
+
+```
+output/
+├── report.pdf/pdf-to-markdown/report.md
+├── scan.pdf/liteparse/scan.md          # fell back from pdf-to-markdown
+└── notes.docx/liteparse/notes.md
+```
+
+## Mode 3 — All-methods (every applicable tool per document)
+
+Runs **all** installed, format-compatible tools on each document — for comparing parsers or when you want the best of each.
+
+```bash
+# Plan + quota cost first (offline; tells you what mineru would spend)
+python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode all --mineru --dry-run
+
+# Run — local tools always; mineru included only with --mineru + tokens
+python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode all --mineru
+```
+
+Output layout — each tool's FULL native output under the document name:
+
+```
+output/
+├── report.pdf/
+│   ├── pdf-to-markdown/report.md
+│   ├── pymupdf/report/output.md
+│   ├── liteparse/report.md
+│   └── mineru/report/           # <stem>.md + images/ (cloud)
+├── notes.docx/
+│   ├── liteparse/notes.md
+│   └── mineru/notes/            # only with --mineru
+└── data.xlsx/liteparse/data.md  # tools that can't handle the format are skipped + noted
+```
+
+Rules:
+
+- **Format gating**: PDFs get all four tools; `.docx/.pptx/.jpg/.jpeg/.png` get liteparse + mineru; liteparse-only formats get liteparse. Inapplicable tools are skipped and listed — never errors.
+- **Cost gating**: local tools always run; mineru requires `--mineru` AND tokens, validated offline via `mineru --dry-run` first. Tell the user the printed quota cost before running in bulk; for >500 counted pages, confirm first.
+- **Empty outputs are diagnosed, not hidden**: pdf-to-markdown returning ~2 bytes (scanned PDF) is recorded in a `.scanned-skip` marker so re-runs skip it instead of failing forever.
+- **Resume**: identical to folder mode — existing outputs are skipped.
+
+For very large mineru-heavy batches (>20 cloud files), prefer running the mineru skill directly with `--dir --workers 10 --resume` (parallel workers, flat `output/<stem>/` layout instead of per-doc).
+
+## Resume reference (what "already done" means per tool)
+
+| Tool | Native flag | Orchestrator skip condition |
+|---|---|---|
+| pdf-to-markdown | none (batch redoes everything) | `<doc>/pdf-to-markdown/<stem>.md` exists and >10 bytes, or `.scanned-skip` marker |
+| pymupdf-pdf | none | `<doc>/pymupdf/<stem>/output.md` exists |
+| liteparse | none (⚠ `batch-parse` overwrites same stems) | `<doc>/liteparse/<stem>.md` exists and non-empty |
+| mineru | `--resume` + always idempotent (existing `<stem>/` dir is skipped, quota-safe) | `<doc>/mineru/<stem>/` dir exists |
 
 ## Out of Scope
 
@@ -250,12 +348,12 @@ This skill handles **content extraction** only. For PDF manipulation, use the ap
 
 ## Workflow
 
-1. **Identify the file(s)** — check extension, size, page count
-2. **Determine intent** — what does the user need? (speed vs. accuracy vs. tables vs. formulas)
-3. **Apply the decision tree** — pick the tool
-4. **Run the tool** — execute the appropriate command
-5. **Verify** — check exit code and output size (tiny output may mean extraction failure)
-6. **Report** — tell the user where the output is and which tool was used
+1. **Pick the mode** — one document → Single; a folder to parse once → Folder; compare/extract with every tool → All-methods
+2. **Identify the input** — check extension, size, page count; for folders, run the orchestrator's `--dry-run`
+3. **Apply routing** — decision tree (Single) or the script's type table (Folder/All)
+4. **Run** — execute the command; for mineru in bulk, relay the quota cost first
+5. **Verify** — check exit code and output size (tiny output = scanned/failure; the orchestrator flags these)
+6. **Report** — where the output is, which tool(s) ran, what was skipped and why
 
 ## Speed Reference
 
@@ -268,3 +366,5 @@ Benchmarked on a psychiatry document collection:
 | Large PDF (~1000p) | 10-12s | 8-15s | 13-30s | 2-5 min |
 | Image (OCR) | N/A | N/A | 15-40s | 15-40s |
 | Batch (13 files) | 5s | 8-15s | 830s | 3-8 min |
+
+liteparse timings assume OCR; text-layer extraction alone is far faster (`--no-ocr`).
