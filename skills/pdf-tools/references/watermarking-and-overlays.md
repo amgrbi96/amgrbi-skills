@@ -60,15 +60,15 @@ Place a prepared stamp/seal/signature page onto every page with pymupdf:
 
 ```python
 # stamp.py — python stamp.py input.pdf stamp.pdf output.pdf
-import pymupdf
+import pymupdf, sys
 
-doc = pymupdf.open("input.pdf")
-stamp = pymupdf.open("stamp.pdf")  # e.g. an "APPROVED" seal
+doc = pymupdf.open(sys.argv[1])
+stamp = pymupdf.open(sys.argv[2])  # e.g. an "APPROVED" seal
 
 for page in doc:
     page.show_pdf_page(pymupdf.Rect(400, 700, 550, 780), stamp, 0)
 
-doc.save("output.pdf")
+doc.save(sys.argv[3])
 ```
 
 pdf-lib equivalent — embed the page, then draw it:

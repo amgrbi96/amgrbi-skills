@@ -390,17 +390,18 @@ qpdf --qdf --object-streams=disable input.pdf decompressed.pdf
 ```
 
 ```python
-import pymupdf
+# redact.py — python redact.py input.pdf "phrase to remove" redacted.pdf
+import pymupdf, sys
 
-doc = pymupdf.open("input.pdf")
-page = doc[0]
+doc = pymupdf.open(sys.argv[1])
+phrase = sys.argv[2]
 
-sensitive_areas = page.search_for("SSN: 123-45-6789")
-for area in sensitive_areas:
-    page.add_redact_annot(area, fill=(0, 0, 0))
+for page in doc:
+    for area in page.search_for(phrase):
+        page.add_redact_annot(area, fill=(0, 0, 0))
+    page.apply_redactions()
 
-page.apply_redactions()
-doc.save("redacted.pdf")
+doc.save(sys.argv[3])
 ```
 
 The `apply_redactions()` call permanently removes the underlying text content, not just the visual layer.

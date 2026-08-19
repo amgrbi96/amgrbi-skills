@@ -26,12 +26,14 @@ Best for: Multi-column layouts, bordered tables, precise cell boundary detection
 For merging thousands of files, pypdf is significantly lighter than a headless browser:
 
 ```python
+# merge.py — python merge.py output.pdf input1.pdf input2.pdf ...
+import sys
 from pypdf import PdfWriter
 
 writer = PdfWriter()
-for pdf in ["a.pdf", "b.pdf"]:
+for pdf in sys.argv[2:]:
     writer.append(pdf)
-writer.write("combined.pdf")
+writer.write(sys.argv[1])
 ```
 
 Best for: Bulk merge/split operations, metadata extraction, simple text extraction.

@@ -44,9 +44,10 @@ Add a navigation outline with pypdf:
 
 ```python
 # outline.py — python outline.py input.pdf output.pdf
+import sys
 from pypdf import PdfReader, PdfWriter
 
-reader = PdfReader("input.pdf")
+reader = PdfReader(sys.argv[1])
 writer = PdfWriter()
 writer.append(reader)  # copies all pages
 
@@ -54,7 +55,7 @@ writer.add_outline_item("Cover", 0)
 ch1 = writer.add_outline_item("Chapter 1", 1)
 writer.add_outline_item("Section 1.1", 2, parent=ch1)
 
-with open("output.pdf", "wb") as f:
+with open(sys.argv[2], "wb") as f:
     writer.write(f)
 ```
 

@@ -4,7 +4,7 @@ description: 'PDF engineering for generation, modification, form filling, and se
 license: MIT
 metadata:
   author: oakoss
-  version: '1.4'
+  version: '1.5'
 ---
 
 # PDF Tools
@@ -122,3 +122,11 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 - [Images and Optimization](references/images-and-optimization.md) -- Embed/extract images, render pages, thumbnails, compression
 - [Form Filling](references/form-filling.md) -- Fillable field extraction, non-fillable annotation workflow, validation scripts
 - [Batch Processing and Accessibility](references/batch-and-accessibility.md) -- Queue-based batch processing, PDF/A compliance, tagged PDFs, digital signatures, comparison, redaction
+
+## Self-Test
+
+After changing SKILL.md or any reference, run the offline self-test. It checks structure (dead links, orphan files), doc drift (deprecated API patterns, parse-docs routing consistency, the prerequisites Check block), and live-executes the documented example scripts against fixtures. Missing deps SKIP with an install hint — they never fail:
+
+```bash
+python3 evals/selftest.py
+```
