@@ -9,7 +9,7 @@ metadata:
     install:
       - id: pip
         kind: pip
-        packages: ["pymupdf"]
+        packages: ["pymupdf>=1.23"]
         label: "Install PyMuPDF (pip)"
       - id: pip-optional
         kind: pip
@@ -23,29 +23,29 @@ One dependency (`pip install pymupdf`), fully local, covering the whole PDF life
 
 ## Setup
 
-Prerequisites: `python3` + the `pymupdf` package. No cloud, no token, no other binaries. Both scripts exit 1 with an install hint if PyMuPDF is missing (`--help` works without it).
+Prerequisites: `python3` + `pymupdf` **1.23 or later** (native table extraction needs 1.23). No cloud, no token, no other binaries. Both scripts exit 1 with an install hint if PyMuPDF is missing (`--help` works without it).
 
 1. Install PyMuPDF:
 
 ```bash
-pip install pymupdf
+pip install "pymupdf>=1.23"
 ```
 
 If pip refuses with "externally-managed-environment" (macOS/Linux system Python), either use a venv:
 
 ```bash
 python3 -m venv ~/.venvs/pymupdf
-~/.venvs/pymupdf/bin/pip install pymupdf
+~/.venvs/pymupdf/bin/pip install "pymupdf>=1.23"
 # then invoke the scripts with that interpreter:
 ~/.venvs/pymupdf/bin/python3 scripts/pymupdf_parse.py /path/to/file.pdf
 ```
 
-or force it: `pip install --break-system-packages pymupdf`.
+or force it: `pip install --break-system-packages "pymupdf>=1.23"`.
 
 2. Verify the dependency:
 
 ```bash
-python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect: 1.24.x or later
+python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect: 1.23 or later
 ```
 
 3. Smoke-test (validates dependency + a real PDF, writes nothing):
@@ -66,8 +66,9 @@ Troubleshooting: NixOS `libstdc++` import failures and other notes live in `refe
 ## The two CLIs
 
 ```bash
-# Extraction: Markdown / JSON / tables / images
+# Extraction: single PDF or a whole directory (batch skips already-parsed docs)
 ./scripts/pymupdf_parse.py file.pdf --format both --tables --images --md-engine auto
+./scripts/pymupdf_parse.py --dir ./pdfs/ --outroot ./pymupdf-output --tables
 
 # Operations: merge, split, rotate, delete, render, info, meta, toc, search, encrypt, decrypt
 ./scripts/pdf_ops.py info file.pdf
@@ -80,13 +81,15 @@ Subcommand flags (including `--dry-run` and `--password`) go **after** the subco
 
 ## Parse options
 
+- `pdf` positional for one file, or `--dir DIR` for batch (skips documents whose output folder already exists)
+- `--pages 1-3,5` to parse a subset — real page numbers are preserved in outputs; applies to every file in batch mode
 - `--format md|json|both` (default: `md`)
 - `--md-engine auto|basic|pymupdf4llm` (default: `auto` — uses pymupdf4llm when installed, else basic)
 - `--images` to extract embedded images
 - `--tables` native table extraction via `page.find_tables()` — bbox + rows as lists (falls back to line-based on PyMuPDF < 1.23)
 - `--outroot DIR` to change output root (default: `./pymupdf-output`)
 - `--lang` language hint recorded in JSON output metadata (default: `en`)
-- `--dry-run` to validate the input PDF and exit without writing anything
+- `--dry-run` to validate inputs (including which batch files would be skipped) and exit without writing anything
 
 ### Markdown engine guide
 
@@ -111,6 +114,8 @@ Load the matching reference file only when the task reaches that family:
 | Annotations, form filling, redaction | `references/annotate-forms-redact.md` | — (recipes) |
 | Encrypt/decrypt, metadata, TOC, embedded files, links | `references/security-metadata.md` | `pdf_ops.py encrypt/decrypt/meta/toc/info` |
 | Install issues, NixOS libstdc++ | `references/pymupdf-notes.md` | — |
+
+Development: after changing either script or any documented claim, run `python3 evals/smoke_test.py` (56 self-contained cases; exits nonzero on any failure).
 
 ## Error handling
 

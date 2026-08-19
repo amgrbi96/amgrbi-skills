@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.0 (2026-08-19)
+
+### Added
+- Batch mode: `--dir DIR` parses every PDF in a directory, skipping
+  documents whose output folder already exists; corrupt/encrypted files are
+  rejected up front without aborting the batch
+- `--pages 1-3,5` parses a subset; real page numbers preserved in outputs
+- `evals/smoke_test.py`: self-contained 56-case suite (CLI matrices, output
+  integrity, reference-snippet checks) — run before publishing changes
+- Dependency floor declared everywhere: `pymupdf>=1.23` (find_tables)
+
+### Changed
+- Batch-shaped JSON summary: `{files, parsed[], skipped[], failed[], output,
+  elapsed_sec}` per run (single-file runs use the same shape)
+
 ## v1.0.0 (2026-08-19)
 
 Full PyMuPDF workbench: restructured for progressive disclosure (lean SKILL.md
