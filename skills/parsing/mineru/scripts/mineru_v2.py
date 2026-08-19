@@ -254,6 +254,15 @@ def api_call(token, method, url, **kw) -> dict:
     return result
 
 
+def out_stem_for(stem: str, opts) -> str:
+    """Output subdirectory name. --pages chunks get a range suffix (book-201-400)
+    so sequential range runs land in separate folders instead of silently
+    skipping each other via the existing-output check."""
+    if opts.pages and not getattr(opts, "is_probe", False):
+        return f"{stem}-{re.sub(r'[^0-9-]+', '_', opts.pages)}"
+    return stem
+
+
 def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, total, opts):
     """Parse one file. Returns (ok, stem, error_msg_or_none).
 
@@ -261,12 +270,13 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
     pages, extra_formats_list) — or a per-run copy with overrides (see --probe).
     """
     stem = file_path.stem
+    out_stem = out_stem_for(stem, opts)
 
-    if (output_dir / stem).exists():
-        print(f"  [{index+1}/{total}] ⏭️  {stem}")
+    if (output_dir / out_stem).exists():
+        print(f"  [{index+1}/{total}] ⏭️  {out_stem}")
         return True, stem, None
 
-    print(f"  [{index+1}/{total}] 📤 {stem}", end="", flush=True)
+    print(f"  [{index+1}/{total}] 📤 {out_stem}", end="", flush=True)
 
     last_err = None
     attempts = 0
@@ -316,15 +326,15 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
                     if state == "done":
                         # 4. download + extract zip
                         print(" 📥", end="", flush=True)
-                        zip_path = output_dir / f"{stem}.zip"
+                        zip_path = output_dir / f"{out_stem}.zip"
                         zip_path.write_bytes(requests.get(results[0]["full_zip_url"], timeout=300).content)
-                        extract_dir = output_dir / stem
+                        extract_dir = output_dir / out_stem
                         with zipfile.ZipFile(zip_path) as zf:
                             zf.extractall(extract_dir)
                         zip_path.unlink()
                         md = extract_dir / "full.md"
                         if md.exists():
-                            md.rename(extract_dir / f"{stem}.md")
+                            md.rename(extract_dir / f"{out_stem}.md")
                         print(" ✅")
                         return True, stem, None
                     if state == "failed":
@@ -530,7 +540,7 @@ def main():
 
     if args.resume:
         original = len(input_files)
-        input_files = [f for f in input_files if not (output_dir / f.stem).exists()]
+        input_files = [f for f in input_files if not (output_dir / out_stem_for(f.stem, args)).exists()]
         if skipped := original - len(input_files):
             print(f"⏭️  Skipping {skipped} already-processed file(s)")
 
@@ -577,7 +587,7 @@ def main():
         for f in input_files:
             pages = f"1-{args.probe}" if f.suffix.lower() == ".pdf" else None
             for model in ("pipeline", "vlm"):
-                probe_opts = argparse.Namespace(**{**vars(args), "model": model, "pages": pages})
+                probe_opts = argparse.Namespace(**{**vars(args), "model": model, "pages": pages, "is_probe": True})
                 ok, _, _ = process_file(pool, f, output_dir / f"{f.stem}-probe" / model, i, total, probe_opts)
                 all_ok = all_ok and ok
                 i += 1

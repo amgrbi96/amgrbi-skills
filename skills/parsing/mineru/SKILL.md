@@ -156,6 +156,8 @@ python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 1-200
 python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 201-400
 ```
 
+Each range lands in its own folder — `output/big-1-200/`, `output/big-201-400/` — so range runs never skip each other, and re-running a finished range is an idempotent no-op.
+
 ### Complex Layouts (slowest, most accurate)
 
 ```bash
@@ -231,6 +233,7 @@ output/
 │   ├── images/             # Extracted images
 │   ├── content.json        # Metadata
 │   └── document-name.docx  # Only with --extra-formats docx
+├── document-name-201-400/  # With --pages: one folder per range (md named to match)
 └── document-name-probe/    # Only with --probe
     ├── pipeline/document-name/document-name.md
     └── vlm/document-name/document-name.md

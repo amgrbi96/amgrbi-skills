@@ -237,6 +237,32 @@ def unit_tests():
         ok, stem, err = m.process_file(m.TokenPool(toks), src / "doc.pdf", out_dir, 0, 1, opts())
     check("resume: existing output skips without network", ok and not freq.get.called)
 
+    # --- --pages chunks: per-range output dirs, no silent skip, idempotent ---
+    (src / "chunk.pdf").write_bytes(b"%PDF-1.4 fake")
+    chunk_out = tdir / "chunks"
+    chunk_out.mkdir()
+    with mock.patch.object(m, "api_call", ok_api), \
+         mock.patch.object(m, "requests", mock.MagicMock(get=fake_get, put=fake_put)):
+        ok1, _, _ = m.process_file(m.TokenPool(toks), src / "chunk.pdf", chunk_out, 0, 1, opts(pages="201-400"))
+        ok2, _, _ = m.process_file(m.TokenPool(toks), src / "chunk.pdf", chunk_out, 0, 1, opts(pages="401-500"))
+    check("chunks: each range gets its own output dir",
+          ok1 and ok2
+          and (chunk_out / "chunk-201-400" / "chunk-201-400.md").exists()
+          and (chunk_out / "chunk-401-500" / "chunk-401-500.md").exists(),
+          f"ok1={ok1} ok2={ok2}")
+    with mock.patch.object(m, "api_call", ok_api), mock.patch.object(m, "requests", mock.MagicMock()) as freq:
+        ok3, _, _ = m.process_file(m.TokenPool(toks), src / "chunk.pdf", chunk_out, 0, 1, opts(pages="201-400"))
+    check("chunks: re-run of same range skips (idempotent)", ok3 and not freq.get.called)
+    with mock.patch.object(m, "api_call", ok_api), \
+         mock.patch.object(m, "requests", mock.MagicMock(get=fake_get, put=fake_put)):
+        ok4, _, _ = m.process_file(m.TokenPool(toks), src / "chunk.pdf", chunk_out, 0, 1, opts())
+    check("chunks: full-file run still writes plain dir",
+          ok4 and (chunk_out / "chunk" / "chunk.md").exists())
+    check("chunks: naming (ranges sanitized, probe exempt)",
+          m.out_stem_for("book", opts(pages="1-10,15")) == "book-1-10_15"
+          and m.out_stem_for("book", SimpleNamespace(pages="1-3", is_probe=True)) == "book"
+          and m.out_stem_for("book", opts()) == "book")
+
     # --- waste guards: pdf_precheck_warnings ---
     guard_dir = tdir / "guards"
     guard_dir.mkdir()
