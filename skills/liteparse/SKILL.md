@@ -208,7 +208,7 @@ lit parse document.pdf --config liteparse.config.json
 
 ```json
 {
-  "ocrEnabled": true,
+  "ocrEnabled": false,
   "ocrLanguage": "eng",
   "maxPages": 1000,
   "dpi": 150,
@@ -218,6 +218,8 @@ lit parse document.pdf --config liteparse.config.json
   "continueOnPageError": false
 }
 ```
+
+Keep `ocrEnabled: false` in configs too — flip it to `true` only after the OCR gate passed and the user approved (see Defaults).
 
 CLI flags override config-file values. Valid keys include everything above plus `ocrServerUrl`, `ocrServerHeaders`, `targetPages`, `password`, `quiet`, `skipDiagonalText` (config-only; no CLI flag).
 

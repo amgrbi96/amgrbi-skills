@@ -109,7 +109,7 @@ Extension is .xlsx, .odt, .rtf, .csv, .tiff, .gif, .webp, …
 ```
 File is scanned, a photo, screenshot, or user says "OCR"
 → mineru for best accuracy (VLM OCR, cloud)
-→ liteparse as local fallback (Tesseract.js)
+→ liteparse as local fallback (built-in Tesseract OCR)
 ```
 
 ### 3. Formulas / math / LaTeX → mineru only
