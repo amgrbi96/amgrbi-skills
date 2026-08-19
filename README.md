@@ -49,11 +49,11 @@ A layered toolkit — `parse-docs` routes to the right tool for the job.
 ```
 skills/
 ├── parsing/            # Document-parsing cluster
-│   ├── parse-docs/     # Router for the parsing cluster
-│   ├── pdf-to-markdown/  # Fast PDF → Markdown (bin/)
-│   ├── pymupdf-pdf/    # Local PyMuPDF parsing (scripts/ references/)
+│   ├── parse-docs/     # Router for the parsing cluster (scripts/parse_folder.py orchestrator)
+│   ├── pdf-to-markdown/  # Fast PDF → Markdown (bin/ + check-env)
+│   ├── pymupdf-pdf/    # Local PyMuPDF parsing (scripts/ references/ evals/)
 │   ├── liteparse/      # Multi-format + OCR
-│   └── mineru/         # Cloud VLM parsing (scripts/ references/)
+│   └── mineru/         # Cloud VLM parsing (scripts/ references/ evals/)
 ├── pdf-tools/          # HTML→PDF gen, PDF/A, signing, qpdf (references/)
 └── openwa/             # WhatsApp gateway guide (references/)
 
@@ -75,14 +75,16 @@ Unsure which document parser to use? Load `parse-docs` and let it route, or use 
 
 ## Development
 
-This is a monorepo of skills — no build step, no test suite. Validation is live (API calls, script `--help`).
+No build step, no linting. Two skills ship offline self-test suites — run them after changing their scripts or any documented claim (they catch doc drift too, and make zero network calls):
 
 ```bash
-# MinerU — verify the parser CLI runs
-python3 skills/parsing/mineru/scripts/mineru_v2.py --help
+python3 skills/parsing/mineru/evals/selftest.py     # 89 checks: CLI, token pool, probe, doc drift
+python3 skills/parsing/pymupdf-pdf/evals/smoke_test.py  # 56 cases over scripts + documented API calls
 ```
 
-See [`CLAUDE.md`](CLAUDE.md) for repo-level development guidance and per-skill technical notes.
+Skills without a suite are validated with their script's `--help` (e.g. `python3 skills/parsing/mineru/scripts/mineru_v2.py --help`).
+
+See [`AGENTS.md`](AGENTS.md) for repo-level development guidance and per-skill technical notes.
 
 ## Adding a Skill
 

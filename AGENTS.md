@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Repo-level guidance for Claude Code. `AGENTS.md` carries the same content for other agents (ZCode, Codex, Cursor) — keep both in sync when editing.
+Repo-level guidance for AI coding agents (ZCode, Codex, Cursor, …). `CLAUDE.md` carries the same content for Claude Code — keep both in sync when editing.
 
 ## Project Overview
 
@@ -56,4 +56,4 @@ Skills without a suite are checked with their script's `--help`.
 
 1. Create `skills/<name>/SKILL.md` with frontmatter (`name`, `description`).
 2. Add `scripts/`, `references/`, `bin/`, or `evals/` as needed.
-3. Update the structure trees in `README.md` and `AGENTS.md`, and `README.md`'s skills table.
+3. Update the structure trees in `README.md` and this file, and `README.md`'s skills table.
