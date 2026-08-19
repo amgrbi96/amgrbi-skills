@@ -66,7 +66,7 @@ skills/
 ├── pymupdf-pdf/        # Local PyMuPDF parsing (scripts/ references/)
 ├── liteparse/          # Multi-format + OCR
 ├── mineru/             # Cloud VLM parsing (scripts/ references/)
-├── pdf-tools/          # PDF manipulation (references/)
+├── pdf-tools/          # HTML→PDF gen, PDF/A, signing, qpdf (references/)
 ├── prospero-search/    # PROSPERO search (scripts/ references/)
 ├── prisma-cli/         # PRISMA pipeline wrapper (scripts/ references/)
 ├── flashcards/         # Flashcard builder (scripts/ references/)

@@ -345,8 +345,8 @@ For very large mineru-heavy batches (>20 cloud files), prefer running the mineru
 This skill handles **content extraction** only. For PDF manipulation, use the appropriate skill:
 
 - **Generate PDFs from HTML** → `pdf-tools` skill (Puppeteer/Playwright)
-- **Modify, merge, split PDFs** → `pdf-tools` skill (pdf-lib)
-- **Fill PDF forms** → `pdf-tools` skill
+- **Modify, merge, split PDFs** → `pymupdf-pdf` skill
+- **Fill PDF forms** → `pymupdf-pdf` skill
 - **Encrypt/sign PDFs** → `pdf-tools` skill (qpdf, @signpdf)
 
 ## Workflow

@@ -30,7 +30,7 @@ skills/
   mineru/                ← MinerU: cloud VLM PDF extraction with layout analysis
   parse-docs/            ← Gateway router for document-parsing skills
   pdf-to-markdown/       ← Fast PDF → Markdown extraction
-  pdf-tools/             ← PDF engineering (generate/merge/encrypt/fill forms)
+  pdf-tools/             ← Puppeteer HTML→PDF, PDF/A, signing, qpdf (page edits → pymupdf-pdf)
 ```
 
 - **`CLAUDE.md`** (this file) — repo-level development guidance, not distributed with any skill.
