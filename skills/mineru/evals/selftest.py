@@ -277,9 +277,20 @@ def unit_tests():
     # pre-seed: good marked dead (stale) -> should be revived
     seed = {m.TokenPool([good])._key(good): {"dead": True}}
     m.STATE_FILE.write_text(json.dumps(seed))
-    ct_args = SimpleNamespace(token=None, tokens_file=None)
+
+    def isolated_env(tokens_csv=None):
+        # strip real MINERU_TOKEN/MINERU_TOKENS from the user's shell so tests
+        # can't inherit live tokens (patch.dict alone only merges/overrides)
+        env = {k: v for k, v in os.environ.items() if k not in ("MINERU_TOKEN", "MINERU_TOKENS")}
+        if tokens_csv:
+            env["MINERU_TOKENS"] = tokens_csv
+        return env
+
+    no_file = tdir / "no-tokens.txt"  # exists but empty: blocks the skill's real tokens.txt without tripping the missing-file check
+    no_file.touch()
+    ct_args = SimpleNamespace(token=None, tokens_file=str(no_file))
     with mock.patch.object(m, "api_call", ct_api), \
-         mock.patch.dict(os.environ, {"MINERU_TOKENS": f"{good},{bad},{odd}"}):
+         mock.patch.dict(os.environ, isolated_env(f"{good},{bad},{odd}"), clear=True):
         rc = m.run_check_token(ct_args)
     state = json.loads(m.STATE_FILE.read_text())
     kp = m.TokenPool([good, bad, odd])
@@ -287,8 +298,8 @@ def unit_tests():
     check("check-token: invalid marked dead in state", state.get(kp._key(bad)) == {"dead": True}, str(state))
     check("check-token: stale-dead token revived", kp._key(good) not in state, str(state))
     with mock.patch.object(m, "api_call", ct_api), \
-         mock.patch.dict(os.environ, {"MINERU_TOKENS": bad}):
-        rc = m.run_check_token(SimpleNamespace(token=None, tokens_file=None))
+         mock.patch.dict(os.environ, isolated_env(bad), clear=True):
+        rc = m.run_check_token(SimpleNamespace(token=None, tokens_file=str(no_file)))
     check("check-token: exit 1 when none active", rc == 1)
 
     shutil.rmtree(tdir, ignore_errors=True)
@@ -309,12 +320,16 @@ def cli_tests():
     (tdir / "other.pdf").write_bytes(b"%PDF-1.4 fake")
     (tdir / "doc.docx").write_bytes(b"PK fake")
     tok = "fake-token-1234567890"
+    (tdir / "no-tokens.txt").touch()  # exists but empty: hermetic default for --tokens-file
 
     block = tdir / "block"
     block.mkdir()
     (block / "requests.py").write_text("raise ImportError('blocked for test')\n")
 
     def run(*argv, env_extra=None, py=sys.executable):
+        argv = list(argv)
+        if "--tokens-file" not in argv:
+            argv += ["--tokens-file", str(tdir / "no-tokens.txt")]  # hermetic: never read the skill's real tokens.txt
         env = {k: v for k, v in os.environ.items() if k not in ("MINERU_TOKEN", "MINERU_TOKENS")}
         env["HOME"] = str(home)
         if env_extra:
@@ -361,7 +376,7 @@ def cli_tests():
     rt("cli: bad --dir -> 2", ["--dir", str(tdir / "nope"), "--output", str(tdir / "o"),
                                "--token", tok, "--dry-run"], 2, r"not a directory")
     rt("cli: missing --tokens-file -> 2", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
-                                           "--tokens-file", str(tdir / "no-tokens.txt"), "--dry-run"],
+                                           "--tokens-file", str(tdir / "absent-tokens.txt"), "--dry-run"],
        2, r"tokens-file not found")
 
     # state file
