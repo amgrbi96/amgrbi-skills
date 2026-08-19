@@ -61,6 +61,14 @@ Each token gets its own daily page quota. The script round-robins across all tok
 
 To scale daily throughput, add tokens — 3 tokens ≈ 3000 pages/day.
 
+### Token health check
+
+```bash
+python3 scripts/mineru_v2.py --check-token
+```
+
+One read-only API call per token (zero page spend): reports valid / invalid / inconclusive, marks invalid tokens dead in the state file, and revives stale dead/exhausted marks. Run it after adding tokens or when a run fails with auth errors. Needs no `--file`/`--dir`/`--output`.
+
 ## Limits (verified Aug 2026)
 
 | Limit | Value | Handled by |
@@ -88,6 +96,17 @@ See the `parse-docs` router skill for full decision logic.
 | 📝 Word | `.docx` — reports, manuscripts |
 | 📊 PPT | `.pptx` — slides, presentations |
 | 🖼️ Image | `.jpg`, `.jpeg`, `.png` — OCR extraction |
+
+## Clarify Intent Before Parsing
+
+Defaults fit most runs — ask only what's ambiguous, one round, then parse:
+
+1. **Accuracy or speed?** Default `vlm` (slowest, highest accuracy). For quick text extraction suggest `pipeline`. Undecided? Settle it empirically with `--probe` (sample-parse with both models — see Commands).
+2. **Deliverables?** Markdown by default; `--extra-formats docx,html,latex` adds those files at no extra page cost.
+3. **Output location?** Default `./output/` next to the input; confirm when the user names a vault or folder.
+4. **Language?** `auto` handles most; `ch` improves Chinese-only documents.
+
+Cost framing: every parsed page spends daily quota (1000 pages/token/day) — quote the estimated page count when the user asks whether to proceed.
 
 ## Commands
 
@@ -143,12 +162,20 @@ python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 201-400
 python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 ```
 
+### Sample Probe (pick a model empirically)
+
+```bash
+python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --probe   # first 3 pages, both models
+```
+
+Parses the sample with `pipeline` AND `vlm` side by side into `output/<name>-probe/`, ~2×3 pages of quota per file. Compare the two `.md` files, then run the full parse with `--model <winner>`. PDFs and images only — page ranges don't apply to Office files.
+
 ## CLI Options
 
 ```
 --dir PATH          Input directory (PDF/Word/PPT/images); hidden dotfiles ignored
 --file PATH         Single file (mutually exclusive with --dir)
---output PATH       Output directory (required)
+--output PATH       Output directory (required unless --check-token)
 --token TOKEN       Token placed first in the pool (env/file tokens still used)
 --tokens-file PATH  Read tokens from file, one per line (default: <skill>/tokens.txt)
 --workers N         Concurrent workers, >= 1 (default: 5)
@@ -156,6 +183,9 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 --model MODEL       pipeline | vlm | MinerU-HTML (default: vlm)
 --language LANG     auto | en | ch (default: auto)
 --pages RANGES      Page ranges, e.g. "1-10,15,20-30" (validated; applies to every file with --dir)
+--extra-formats F   Extra deliverables: comma list from docx,html,latex (default: none)
+--probe [N]         Sample-parse first N pages with both models, then stop (default: 3)
+--check-token       Verify pool tokens against the API (read-only), then exit
 --no-formula        Disable formula recognition
 --no-table          Disable table extraction
 --dry-run           Validate files and tokens, no network, no dependencies
@@ -180,6 +210,18 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 - Ctrl-C saves token state and exits 130 — re-run with `--resume` to continue
 - Exit codes: 0 success, 1 runtime failure (failed files / no token / bad input file / no network), 2 usage error (bad flag values) — safe for scripting
 
+## Waste Guards
+
+The script refuses to spend quota silently:
+
+- **Duplicate runs** — existing output directories are always skipped (⏭️), so re-runs never re-parse
+- **OCR overkill** — warns when a PDF already has a text layer (a local parser likely suffices — see comparison table above)
+- **Over-limit files** — warns when a PDF is estimated >200 pages, with the exact `--pages` split to use
+- **Over-budget batches** — warns when estimated total pages exceed the pool's daily capacity (~1000/token)
+- **Token health** — `--check-token` catches dead tokens before a run instead of mid-batch
+
+Estimates come from raw PDF bytes (best-effort — compressed PDFs may hide page counts); warnings are advisory, nothing is blocked.
+
 ## Output Structure
 
 ```
@@ -187,7 +229,11 @@ output/
 ├── document-name/
 │   ├── document-name.md    # Main Markdown
 │   ├── images/             # Extracted images
-│   └── content.json        # Metadata
+│   ├── content.json        # Metadata
+│   └── document-name.docx  # Only with --extra-formats docx
+└── document-name-probe/    # Only with --probe
+    ├── pipeline/document-name/document-name.md
+    └── vlm/document-name/document-name.md
 ```
 
 ## Performance
@@ -197,6 +243,17 @@ output/
 | 1 (sequential) | 1.2 files/min |
 | 5 | 3.1 files/min |
 | 15 | 5.6 files/min |
+
+## Keeping This Skill Current
+
+- **Verified stamps**: the Limits table above and `references/api_reference.md` carry "verified <date>" stamps. Re-check against https://mineru.net/apiManage/docs quarterly — file/page limits, error codes, parameter defaults.
+- **Self-test**: after changing the script or any documented claim, run the offline self-test (checks every documented flag/default against `--help`, exercises all offline paths, no network):
+
+```bash
+python3 evals/selftest.py
+```
+
+- **Live smoke test**: `--check-token` doubles as one — if known-good tokens start reporting "inconclusive", the API's error codes changed; update `references/api_reference.md` and the code's `FATAL_TOKEN_CODES` / `-60012` handling.
 
 ## Agent Lightweight API (no token)
 

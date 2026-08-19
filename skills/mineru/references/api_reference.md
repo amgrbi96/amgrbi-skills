@@ -162,6 +162,10 @@ Response:
 | `no_cache` | bool | `false` | Bypass cache |
 | `cache_tolerance` | int | 900 | Cache TTL (seconds) |
 
+### Zero-cost token probe
+
+`GET /extract/task/<any-nonexistent-id>` with a Bearer token discriminates auth health without creating tasks or spending pages: `-60012` (task not found) means the token authenticated fine; `A0202`/`A0211` mean invalid/expired. This is what the script's `--check-token` uses. Derived from the documented codes above — treat as best-effort until live-verified on your next token check.
+
 ---
 
 ## Agent Lightweight API (`/api/v1`)

@@ -88,7 +88,7 @@ Per-tool setup after install:
 | `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
 | `pymupdf-pdf` | `pip install "pymupdf>=1.23"` (`pymupdf4llm` recommended — better Markdown engine + layout addon; see its `references/pymupdf-notes.md`) |
 | `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs) |
-| `mineru` | Token from https://mineru.net/user-center/api-token into `MINERU_TOKEN`, `MINERU_TOKENS` (pool), or `mineru/tokens.txt`; `pip install requests`; Python 3.10+ |
+| `mineru` | Token from https://mineru.net/user-center/api-token into `MINERU_TOKEN`, `MINERU_TOKENS` (pool), or `mineru/tokens.txt`; `pip install requests`; Python 3.10+ — verify offline with `--dry-run`; `--check-token` validates the pool, `--probe` compares models on a sample |
 
 ## Mode 1 — Single document (default)
 

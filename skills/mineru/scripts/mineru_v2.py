@@ -5,8 +5,11 @@ MinerU cloud API parser — PDF / Word / PPT / images → Markdown.
 Design goals (make this the only thing you need to run MinerU):
 - Multi-token pool: rotate on daily-limit (-60018), drop invalid tokens (A0202/A0211)
 - Pre-flight checks: file existence, extension, 200 MB size cap, token presence
+- Waste guards: skip existing outputs, warn on text-layer PDFs, page-budget estimates
 - Error-code-aware retries: never retry non-retryable API errors
 - Resume: skip files whose output directory already exists
+- --probe: sample-parse with both models to pick one empirically
+- --check-token: read-only pool health check, zero page spend
 - --dry-run: validate everything without touching the network (works without `requests`)
 
 Requires Python 3.10+ (`str | None` unions, walrus operators) — enforced below.
@@ -41,6 +44,8 @@ TOKEN_URL = "https://mineru.net/user-center/api-token"
 
 SUPPORTED_EXTS = {".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"}
 MAX_FILE_BYTES = 200 * 1024 * 1024  # API hard limit: 200 MB
+EXTRA_FORMATS = {"docx", "html", "latex"}
+DAILY_PAGES_PER_TOKEN = 1000
 
 # API error codes that should never be retried for the same file/token combo.
 FATAL_FILE_CODES = {"-500", "-60005", "-60006", "-60023"}  # bad param / too large / too many pages / region
@@ -163,6 +168,11 @@ class TokenPool:
             self.dead.add(token)
         print(f"\n❌ Token {mask(token)} removed from pool: {why}")
 
+    def revive(self, token: str):
+        with self._lock:
+            self.dead.discard(token)
+            self.exhausted.pop(token, None)
+
     def report(self) -> str:
         lines = []
         for t in self._all:
@@ -198,6 +208,44 @@ def check_file(f: Path) -> str | None:
     return None
 
 
+def pdf_precheck_warnings(files: list[Path], pool: TokenPool) -> list[str]:
+    """Zero-dependency, best-effort waste guards over raw PDF bytes.
+
+    Estimates pages from the largest /Count in the page tree (hidden in some
+    compressed PDFs) and flags PDFs that already carry a text layer, where a
+    local parser usually suffices. All warnings are advisory — nothing is blocked.
+    """
+    warnings = []
+    total_pages, counted = 0, 0
+    for f in files:
+        if f.suffix.lower() != ".pdf":
+            continue
+        try:
+            data = f.read_bytes()
+        except OSError:
+            continue
+        if b"/Font" in data:
+            warnings.append(
+                f"⚠️  {f.name}: text layer detected — a local parser (pdf-to-markdown / pymupdf-pdf) "
+                "is likely enough; MinerU pays off for formulas, complex layout, or dense tables")
+        counts = [int(n) for n in re.findall(rb"/Count\s+(\d+)", data)]
+        est = max(counts) if counts else None
+        if est:
+            total_pages += est
+            counted += 1
+            if est > 200:
+                warnings.append(
+                    f"⚠️  {f.name}: ~{est} pages (estimated) exceeds the 200-page API limit — "
+                    "split with --pages 1-200, 201-400, …")
+    capacity = DAILY_PAGES_PER_TOKEN * len(pool.available())
+    if capacity and total_pages > capacity:
+        warnings.append(
+            f"⚠️  estimated ~{total_pages} pages across {counted} PDF(s) vs ~{capacity} pages/day "
+            f"pool capacity ({len(pool.available())} active token(s)) — the run will likely stop at "
+            "the daily limit; add tokens or split across days with --pages + --resume")
+    return warnings
+
+
 def api_call(token, method, url, **kw) -> dict:
     resp = requests.request(method, url, headers=headers(token), timeout=kw.pop("timeout", 60), **kw)
     result = resp.json()
@@ -206,9 +254,12 @@ def api_call(token, method, url, **kw) -> dict:
     return result
 
 
-def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, total,
-                 model, language, enable_formula, enable_table, page_ranges):
-    """Parse one file. Returns (ok, stem, error_msg_or_none)."""
+def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, total, opts):
+    """Parse one file. Returns (ok, stem, error_msg_or_none).
+
+    `opts` is the argparse namespace (model, language, no_formula, no_table,
+    pages, extra_formats_list) — or a per-run copy with overrides (see --probe).
+    """
     stem = file_path.stem
 
     if (output_dir / stem).exists():
@@ -232,14 +283,16 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
             # 1. request pre-signed upload URL
             payload = {
                 "files": [{"name": file_path.name, "data_id": stem}],
-                "model_version": model,
-                "enable_formula": enable_formula,
-                "enable_table": enable_table,
+                "model_version": opts.model,
+                "enable_formula": not opts.no_formula,
+                "enable_table": not opts.no_table,
             }
-            if language != "auto":
-                payload["language"] = language
-            if page_ranges:
-                payload["page_ranges"] = page_ranges
+            if opts.language != "auto":
+                payload["language"] = opts.language
+            if opts.pages:
+                payload["page_ranges"] = opts.pages
+            if opts.extra_formats_list:
+                payload["extra_formats"] = list(opts.extra_formats_list)
             result = api_call(token, "POST", f"{API_BASE}/file-urls/batch", json=payload)
             batch_id = result["data"]["batch_id"]
             upload_url = result["data"]["file_urls"][0]
@@ -308,14 +361,77 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
     return False, stem, last_err
 
 
+def ensure_online(output_dir: Path):
+    """requests present, mineru.net reachable, output writable — exit(1) with a clear error if not."""
+    if requests is None:
+        print("❌ requests is required to parse (--help and --dry-run work without it): "
+              "pip install requests")
+        sys.exit(1)
+    try:
+        requests.get("https://mineru.net", timeout=10)
+    except requests.RequestException as e:
+        print(f"❌ Cannot reach mineru.net: {e}")
+        sys.exit(1)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"❌ Cannot create output directory {output_dir}: {e}")
+        sys.exit(1)
+
+
+def run_check_token(args) -> int:
+    """Verify every pool token against the API without spending pages.
+
+    GET on a nonexistent task id discriminates auth health: -60012 (task not
+    found) means the token authenticated fine; A0202/A0211 mark it dead.
+    Best-effort — derived from documented codes, verdicts may be inconclusive.
+    """
+    if requests is None:
+        print("❌ requests is required for --check-token: pip install requests")
+        return 1
+    tokens = load_tokens(args)
+    if not tokens:
+        print(f"❌ No API token found. Set MINERU_TOKEN / MINERU_TOKENS, use --token, "
+              f"or create {default_tokens_file()} (one token per line).\n   Get one at {TOKEN_URL}")
+        return 1
+    pool = TokenPool(tokens)
+    print(f"\n🔌 Checking {len(tokens)} token(s) against the API (read-only, no page spend)…")
+    for t in tokens:
+        label = mask(t)
+        valid = False
+        try:
+            api_call(t, "GET", f"{API_BASE}/extract/task/selftest-probe", timeout=30)
+            valid = True  # no error at all — authenticated fine
+        except APIError as e:
+            if e.code in FATAL_TOKEN_CODES:
+                pool.mark_dead(t, e.msg)
+                print(f"  {label}  ❌ invalid ({e.msg}) — remove it from your token sources")
+            elif e.code == "-60012":
+                valid = True  # task-not-found proves auth passed
+            else:
+                print(f"  {label}  ❓ inconclusive ({e}) — treated as usable")
+        except requests.RequestException as e:
+            print(f"❌ Cannot reach mineru.net: {e}")
+            return 1
+        if valid:
+            print(f"  {label}  ✅ valid")
+            if t in pool.dead or t in pool.exhausted:
+                pool.revive(t)
+                print(f"  {label}  ♻️  revived (was marked dead/exhausted in state)")
+    pool.save_state()
+    active = len(pool.available())
+    print(f"\n{active}/{len(tokens)} token(s) active (state: {STATE_FILE})")
+    return 0 if active else 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="MinerU cloud API parser (PDF/Word/PPT/images → Markdown)",
     )
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group()
     group.add_argument("--dir", help="Input directory (PDF/Word/PPT/images)")
     group.add_argument("--file", help="Single file path")
-    parser.add_argument("--output", required=True, help="Output directory")
+    parser.add_argument("--output", help="Output directory (required unless --check-token)")
     parser.add_argument("--token", help="API token (placed first in the pool; env/tokens.txt tokens are still used)")
     parser.add_argument("--tokens-file", help=f"Read tokens from file, one per line (default: {default_tokens_file()})")
     parser.add_argument("--workers", "-w", type=int, default=5, help="Concurrent workers (default: 5)")
@@ -325,11 +441,17 @@ def main():
     parser.add_argument("--language", default="auto", choices=["auto", "en", "ch"],
                         help="Document language (default: auto)")
     parser.add_argument("--pages", help="Page ranges, e.g. '1-10,15,20-30' (bypasses the 200-page limit)")
+    parser.add_argument("--extra-formats", help="Extra deliverables: comma list from docx,html,latex (default: none)")
+    parser.add_argument("--probe", nargs="?", const=3, type=int, metavar="N",
+                        help="Sample-parse the first N pages (default: 3) with BOTH pipeline and vlm, then stop")
+    parser.add_argument("--check-token", action="store_true",
+                        help="Verify every pool token against the API (read-only, no page spend), then exit")
     parser.add_argument("--no-formula", action="store_true", help="Disable formula recognition")
     parser.add_argument("--no-table", action="store_true", help="Disable table extraction")
     parser.add_argument("--dry-run", action="store_true", help="Validate files and tokens, then exit (no network, no dependencies)")
     args = parser.parse_args()
 
+    # --- flag validation ---
     if args.workers < 1:
         parser.error("--workers must be >= 1")
 
@@ -342,6 +464,33 @@ def main():
                 parser.error(f"invalid page range '{part.strip()}' (pages start at 1, start must not exceed end)")
         if args.dir:
             print("⚠️  --pages applies to every file in the directory")
+
+    if args.probe is not None:
+        if args.pages:
+            parser.error("--probe and --pages are mutually exclusive")
+        if not 1 <= args.probe <= 200:
+            parser.error("--probe must be between 1 and 200 pages")
+
+    args.extra_formats_list = []
+    if args.extra_formats:
+        for x in args.extra_formats.split(","):
+            x = x.strip()
+            if x and x not in args.extra_formats_list:
+                args.extra_formats_list.append(x)
+        bad = [x for x in args.extra_formats_list if x not in EXTRA_FORMATS]
+        if bad:
+            parser.error(f"--extra-formats: unknown '{','.join(bad)}' (valid: docx,html,latex)")
+
+    if args.check_token and args.dry_run:
+        parser.error("--check-token is itself a live check; drop --dry-run")
+    if not args.check_token:
+        if not (args.dir or args.file):
+            parser.error("one of the arguments --dir --file is required")
+        if not args.output:
+            parser.error("the following argument is required: --output")
+
+    if args.check_token:
+        sys.exit(run_check_token(args))
 
     output_dir = Path(args.output).expanduser()
 
@@ -366,6 +515,11 @@ def main():
         print("❌ No valid input files")
         sys.exit(1)
 
+    if args.probe is not None:
+        office = [f.name for f in input_files if f.suffix.lower() in (".docx", ".pptx")]
+        if office:
+            parser.error(f"--probe supports PDFs and images only (page ranges don't apply to: {', '.join(office)})")
+
     # --- tokens ---
     tokens = load_tokens(args)
     if not tokens:
@@ -384,6 +538,12 @@ def main():
           f"| tokens: {len(tokens)} ({len(pool.available())} active)")
     print(f"🔑 Token pool:\n{pool.report()}\n")
 
+    precheck = pdf_precheck_warnings(input_files, pool)
+    for w in precheck:
+        print(w)
+    if precheck:
+        print()
+
     if args.dry_run:
         total_mb = sum(f.stat().st_size for f in input_files) / 1024 / 1024
         if rejected:
@@ -392,14 +552,11 @@ def main():
             print(f"⛔ All tokens exhausted or invalid today — parsing would fail. "
                   f"Add tokens or clear the state file tomorrow ({STATE_FILE}).")
             sys.exit(1)
+        note = (f" Probe planned: first {args.probe} page(s) × pipeline + vlm "
+                f"(~{2 * args.probe} pages/file of quota).") if args.probe is not None else ""
         print(f"✅ Dry run OK — {len(input_files)} file(s), {total_mb:.1f} MB total, "
-              f"{len(pool.available())} active token(s). Ready to parse.")
+              f"{len(pool.available())} active token(s). Ready to parse.{note}")
         return
-
-    if requests is None:
-        print("❌ requests is required to parse (--help and --dry-run work without it): "
-              "pip install requests")
-        sys.exit(1)
 
     if not input_files:
         print("✅ Nothing to do")
@@ -410,18 +567,27 @@ def main():
               "Add more tokens or clear the state file tomorrow.")
         sys.exit(1)
 
-    # --- connectivity check with a clear error instead of a stack trace ---
-    try:
-        requests.get("https://mineru.net", timeout=10)
-    except requests.RequestException as e:
-        print(f"❌ Cannot reach mineru.net: {e}")
-        sys.exit(1)
+    ensure_online(output_dir)
 
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        print(f"❌ Cannot create output directory {output_dir}: {e}")
-        sys.exit(1)
+    if args.probe is not None:
+        print(f"\n🔬 Probing first {args.probe} page(s) with pipeline + vlm "
+              f"(~{2 * args.probe} pages/file of quota)")
+        total = len(input_files) * 2
+        all_ok, i = True, 0
+        for f in input_files:
+            pages = f"1-{args.probe}" if f.suffix.lower() == ".pdf" else None
+            for model in ("pipeline", "vlm"):
+                probe_opts = argparse.Namespace(**{**vars(args), "model": model, "pages": pages})
+                ok, _, _ = process_file(pool, f, output_dir / f"{f.stem}-probe" / model, i, total, probe_opts)
+                all_ok = all_ok and ok
+                i += 1
+            print(f"    pipeline: {output_dir / f.stem}-probe/pipeline/{f.stem}/{f.stem}.md")
+            print(f"    vlm:      {output_dir / f.stem}-probe/vlm/{f.stem}/{f.stem}.md")
+        pool.save_state()
+        if all_ok:
+            print("\n🔬 Compare the two samples per file, then run the full parse with "
+                  "--model pipeline|vlm (plus --extra-formats / --no-formula / --no-table as needed)")
+        sys.exit(0 if all_ok else 1)
 
     success, failures = 0, []
     start = time.time()
@@ -430,9 +596,7 @@ def main():
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
             futures = {
                 executor.submit(
-                    process_file, pool, f, output_dir, i, len(input_files),
-                    args.model, args.language,
-                    not args.no_formula, not args.no_table, args.pages,
+                    process_file, pool, f, output_dir, i, len(input_files), args,
                 ): f
                 for i, f in enumerate(input_files)
             }
