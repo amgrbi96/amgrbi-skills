@@ -1,6 +1,6 @@
 ---
 title: Page Operations
-description: Rotate, delete, reorder, extract and crop pages; bookmarks and outlines with pypdf; links and attachments with pymupdf; linearization and decryption with qpdf
+description: Rotate, delete, reorder, extract and crop pages; bookmarks and outlines, links and attachments with pymupdf; linearization and decryption with qpdf
 tags: [pages, rotate, crop, extract, outline, bookmarks, links, attachments, linearize, decrypt]
 ---
 
@@ -36,30 +36,26 @@ pages.forEach((p) => out.addPage(p));
 await fs.writeFile('extracted.pdf', await out.save());
 ```
 
-Bulk page reordering across thousands of files is lighter with pypdf (see [Legacy Utilities](legacy-utilities.md)).
+Bulk page reordering across thousands of files is lighter with pymupdf (see [Legacy Utilities](legacy-utilities.md)).
 
 ## Bookmarks and Outlines
 
-Add a navigation outline with pypdf:
+Add a navigation outline with pymupdf:
 
 ```python
 # outline.py — python outline.py input.pdf output.pdf
-import sys
-from pypdf import PdfReader, PdfWriter
+import pymupdf, sys
 
-reader = PdfReader(sys.argv[1])
-writer = PdfWriter()
-writer.append(reader)  # copies all pages
-
-writer.add_outline_item("Cover", 0)
-ch1 = writer.add_outline_item("Chapter 1", 1)
-writer.add_outline_item("Section 1.1", 2, parent=ch1)
-
-with open(sys.argv[2], "wb") as f:
-    writer.write(f)
+doc = pymupdf.open(sys.argv[1])
+doc.set_toc([
+    [1, "Cover", 1],
+    [1, "Chapter 1", 2],
+    [2, "Section 1.1", 3],
+])
+doc.save(sys.argv[2])
 ```
 
-Page numbers are 0-based. For generated documents, prefer setting bookmarks from a known heading map rather than guessing page positions.
+Each entry is `[level, title, page]` with **1-based** pages; `set_toc` replaces the entire outline. For generated documents, prefer building the list from a known heading map rather than guessing page positions.
 
 ## Links
 
@@ -124,7 +120,7 @@ To modify an encrypted PDF in JS instead, load it with `@cantoo/pdf-lib` and `{ 
 | ----------------------- | ------------ | --------------------------------------- |
 | Rotate/delete/crop page | pdf-lib      | `setRotation(degrees(n))`, `setCropBox` |
 | Extract page subset     | pdf-lib      | `copyPages(src, indices)`               |
-| Bookmarks/outline       | pypdf        | `add_outline_item(title, page, parent)` |
+| Bookmarks/outline       | pymupdf      | `set_toc([[level, title, page]])`       |
 | Links                   | pymupdf      | `insert_link` with `LINK_URI`/`LINK_GOTO` |
 | Attachments             | pymupdf      | `embfile_add`/`embfile_get`             |
 | Linearize/decrypt       | qpdf         | `--linearize`, `--password=... --decrypt` |

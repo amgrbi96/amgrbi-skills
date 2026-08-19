@@ -4,7 +4,7 @@ description: 'PDF engineering for generation, modification, form filling, and se
 license: MIT
 metadata:
   author: oakoss
-  version: '1.5'
+  version: '1.6'
 ---
 
 # PDF Tools
@@ -33,7 +33,7 @@ for pkg in pdf-lib puppeteer unpdf bullmq @signpdf/signpdf; do
 done
 
 # Python packages
-for mod in pymupdf pdfplumber pypdf; do
+for mod in pymupdf pdfplumber; do
   python3 -c "import $mod" 2>/dev/null && echo "$mod: ok" || echo "$mod: MISSING"
 done
 
@@ -55,7 +55,7 @@ npm i @signpdf/signpdf @signpdf/signer-p12 @signpdf/placeholder-plain \
   @signpdf/utils                 # digital signatures
 
 # Python
-pip install pymupdf pdfplumber pypdf
+pip install pymupdf pdfplumber
 
 # CLI — macOS
 brew install qpdf ghostscript verapdf poppler exiftool redis
@@ -76,10 +76,10 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 | Fill non-fillable forms    | Python annotation scripts     | Visual analysis + bounding box annotations                                 |
 | Encrypt PDF                | qpdf                          | AES-256: `qpdf --encrypt user owner 256 --`                                |
 | Repair corrupted PDF       | qpdf                          | `qpdf input.pdf --replace-input`                                           |
-| Merge thousands of files   | pypdf (Python)                | Lighter than headless browser                                              |
+| Merge thousands of files   | pymupdf                       | `insert_pdf` into one doc; lighter than a headless browser                 |
 | Rotate, delete, crop pages | pdf-lib                       | `setRotation(degrees(90))`, `removePage`, `setCropBox`                     |
 | Extract page subset        | pdf-lib                       | `copyPages(src, indices)` into a new document                              |
-| Bookmarks / outlines       | pypdf                         | `writer.add_outline_item(title, page, parent)`                             |
+| Bookmarks / outlines       | pymupdf                       | `set_toc([[level, title, page]])` — 1-based pages                          |
 | Watermark / page numbers   | pdf-lib                       | `drawText` with `opacity` looped over pages                                |
 | Stamp from another PDF     | pymupdf                       | `show_pdf_page` places a stamp/seal page                                   |
 | Embed / extract images     | pdf-lib / pymupdf             | `embedPng`; `get_images` + `Pixmap`                                        |
@@ -102,7 +102,7 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 | Extracting complex layouts with basic text parsers     | Use AI-assisted OCR or pdfplumber for multi-column text           |
 | Storing unencrypted PDFs with PII in public storage    | Apply AES-256 encryption via qpdf before storage                  |
 | Relying on `window.print()` for server-side generation | Use headless browser APIs (`page.pdf()`) for deterministic output |
-| Using pypdf for complex layout extraction              | Use pdfplumber or AI OCR for multi-column or overlapping text     |
+| Complex layouts parsed with basic tools               | Route to the parse-docs skill (liteparse/mineru)                  |
 | Skipping font embedding in containerized environments  | Embed Google Fonts or WOFF2 files with Puppeteer                  |
 | Writing to flattened PDF form fields                   | Inspect AcroForm fields with pdf-lib before writing               |
 | Using unmaintained `pdf-lib` for encrypted PDFs        | Use `@cantoo/pdf-lib` fork which adds encrypted PDF support       |
@@ -116,7 +116,7 @@ Puppeteer downloads its own Chromium at install — no separate Chrome needed. I
 ## References
 
 - [High-Fidelity Generation](references/high-fidelity-generation.md) -- Puppeteer HTML-to-PDF, CSS print tips, React templates, browser pooling
-- [Legacy Utilities](references/legacy-utilities.md) -- pdfplumber, pypdf, qpdf, poppler-utils for batch and forensic tasks
+- [Legacy Utilities](references/legacy-utilities.md) -- pdfplumber, pymupdf, qpdf, poppler-utils for batch and forensic tasks
 - [Page Operations](references/page-operations.md) -- Rotate/delete/crop/extract pages, bookmarks, links, attachments, linearize, decrypt
 - [Watermarking and Overlays](references/watermarking-and-overlays.md) -- Watermarks, page numbers on existing PDFs, stamping pages from other documents
 - [Images and Optimization](references/images-and-optimization.md) -- Embed/extract images, render pages, thumbnails, compression

@@ -15,7 +15,7 @@ Covers, in order:
    expected tool.
 3. Examples: extracts every filename-headered script from the references
    (`// x.js — node x.js ...` / `# x.py — python x.py ...`) and executes
-   it against fixtures — pdf-lib in a scratch npm project, pymupdf/pypdf
+   it against fixtures — pdf-lib in a scratch npm project, pymupdf
    with the current interpreter, ghostscript if installed. Missing deps
    SKIP with an install hint; they never FAIL.
 
@@ -51,7 +51,7 @@ EXPECT_HEADERED = {
 
 EXPECTED_PREREQ_NAMES = {
     "pdf-lib", "puppeteer", "unpdf", "bullmq", "@signpdf/signpdf",
-    "pymupdf", "pdfplumber", "pypdf",
+    "pymupdf", "pdfplumber",
     "qpdf", "gs", "verapdf", "pdftotext", "exiftool", "redis-server",
 }
 
@@ -264,18 +264,9 @@ def example_tests():
 
     try:
         import pymupdf  # noqa: F401
-        have_pymupdf = True
     except ImportError:
-        have_pymupdf = False
         skip("examples: pymupdf block", "pip3 install pymupdf")
         return
-    try:
-        import pypdf  # noqa: F401
-        have_pypdf = True
-    except ImportError:
-        have_pypdf = False
-        skip("examples: pypdf scripts (outline.py, merge.py)",
-             "pip3 install pypdf")
 
     with tempfile.TemporaryDirectory(prefix="pdf-tools-examples-") as td:
         tdp = Path(td)
@@ -410,19 +401,18 @@ def example_tests():
                   r.returncode == 0 and red is not None
                   and "123-45-6789" not in text, r.stderr[:200])
 
-        if have_pypdf:
-            if "outline.py" in scripts:
-                r = run_py("outline.py", tdp / "input.pdf", tdp / "outlined.pdf")
-                from pypdf import PdfReader
-                n = len(PdfReader(str(tdp / "outlined.pdf")).outline) \
-                    if r.returncode == 0 else -1
-                check("py: outline.py writes 3 bookmarks", n == 3, r.stderr[:200])
-            if "merge.py" in scripts:
-                r = run_py("merge.py", tdp / "merged.pdf", tdp / "input.pdf",
-                           tdp / "input.pdf")
-                merged = py_pages("merged.pdf") if r.returncode == 0 else None
-                check("py: merge.py concatenates pages",
-                      merged is not None and len(merged) == 6, r.stderr[:200])
+        if "outline.py" in scripts:
+            r = run_py("outline.py", tdp / "input.pdf", tdp / "outlined.pdf")
+            outlined = py_pages("outlined.pdf") if r.returncode == 0 else None
+            check("py: outline.py writes 3 bookmarks",
+                  outlined is not None and len(outlined.get_toc()) == 3,
+                  r.stderr[:200])
+        if "merge.py" in scripts:
+            r = run_py("merge.py", tdp / "merged.pdf", tdp / "input.pdf",
+                       tdp / "input.pdf")
+            merged = py_pages("merged.pdf") if r.returncode == 0 else None
+            check("py: merge.py concatenates pages",
+                  merged is not None and len(merged) == 6, r.stderr[:200])
 
         # --- ghostscript compression (skip if absent) ---
         gs = shutil.which("gs")

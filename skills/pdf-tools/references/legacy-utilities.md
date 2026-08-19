@@ -1,7 +1,7 @@
 ---
 title: Legacy Utilities
-description: Python PDF tools (pdfplumber, pypdf) and CLI utilities (qpdf, poppler-utils) for batch processing, table extraction, and forensic repairs
-tags: [pdfplumber, pypdf, qpdf, poppler, Python, CLI, batch-processing]
+description: Python PDF tools (pdfplumber, pymupdf) and CLI utilities (qpdf, poppler-utils) for batch processing, table extraction, and forensic repairs
+tags: [pdfplumber, pymupdf, qpdf, poppler, Python, CLI, batch-processing]
 ---
 
 ## Python Tools
@@ -21,19 +21,18 @@ with pdfplumber.open("complex_report.pdf") as pdf:
 
 Best for: Multi-column layouts, bordered tables, precise cell boundary detection.
 
-### pypdf (Fast Merging)
+### pymupdf (Fast Merging)
 
-For merging thousands of files, pypdf is significantly lighter than a headless browser:
+For merging thousands of files, pymupdf is significantly lighter than a headless browser — and it's the same engine the render/redact/stamp workflows already use:
 
 ```python
 # merge.py — python merge.py output.pdf input1.pdf input2.pdf ...
-import sys
-from pypdf import PdfWriter
+import pymupdf, sys
 
-writer = PdfWriter()
-for pdf in sys.argv[2:]:
-    writer.append(pdf)
-writer.write(sys.argv[1])
+out = pymupdf.open()
+for path in sys.argv[2:]:
+    out.insert_pdf(pymupdf.open(path))
+out.save(sys.argv[1])
 ```
 
 Best for: Bulk merge/split operations, metadata extraction, simple text extraction.
@@ -84,7 +83,7 @@ Both forks are API-compatible with the original (`@cantoo` is now 2.x — check 
 | Heavy batch processing   | Python: pdfplumber, or CLI: qpdf |
 | AI RAG pipeline          | unpdf or pdftotext               |
 | Corrupted PDF repair     | qpdf                             |
-| Merge/split operations   | pypdf (Python) or pdf-lib (JS)   |
+| Merge/split operations   | pymupdf or pdf-lib (JS)          |
 | Table extraction (no AI) | pdfplumber                       |
 | Fast text for indexing   | poppler-utils                    |
 
