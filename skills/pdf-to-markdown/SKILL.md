@@ -74,6 +74,28 @@ INDIR OUTDIR         Batch-convert a directory in parallel
 
 **`--vision` is license-gated.** On the free tier it exits 1 with `vision extraction failed (3017): ... 'vision_icr_api'`. Don't reach for it unless a license key is in hand — for scanned PDFs, route to mineru or liteparse instead (see below).
 
+## Companion subcommands
+
+The same wrapper passes through to two more Nutrient subcommands (both verified working, free tier):
+
+**`pdf-to-text`** — layout-preserving plain text instead of Markdown. Tables come out column-aligned with whitespace, not HTML. Good for diffing or consumers that choke on Markdown.
+
+```bash
+$SKILL_DIR/bin/pdf-to-markdown pdf-to-text INPUT.pdf [OUTPUT.txt]   # also supports INDIR OUTDIR
+```
+
+**`query text`** — BM25 ranked passage search over converted `.md`/`.txt` files. Searches a file, a directory (hits attributed per file), or a pre-built index. Use it after batch conversion to answer "where does this corpus say X" without loading everything into context.
+
+```bash
+$SKILL_DIR/bin/pdf-to-markdown query text OUTPUT_DIR/ "search terms" -k 5
+$SKILL_DIR/bin/pdf-to-markdown query text OUTPUT_DIR/ "search terms" --emit-index corpus.idx  # build once
+$SKILL_DIR/bin/pdf-to-markdown query text corpus.idx "search terms"                          # reuse, faster
+```
+
+Useful options: `-k N` results (default 8), `-e N` context lines (default 5), `--display json` for machine-readable hits (`document`, `line`, `score`, `text`), `--mode strict|balanced|lenient`.
+
+Notes: both subcommands' `--vision` variants hit the same 3017 license gate. `self-update` also exists but is redundant — the wrapper already auto-updates every 6 hours.
+
 ## Output characteristics (verified)
 
 - Headings become ATX (`#`/`##`), mapped from font size/weight.
