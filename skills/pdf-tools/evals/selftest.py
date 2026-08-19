@@ -30,7 +30,7 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parent.parent
 REFS = SKILL_DIR / "references"
 SKILL_MD = SKILL_DIR / "SKILL.md"
-PARSE_DOCS = SKILL_DIR.parent / "parse-docs" / "SKILL.md"
+PARSE_DOCS = SKILL_DIR.parent / "parsing" / "parse-docs" / "SKILL.md"
 
 PASSED, FAILED, SKIPPED = [0], [0], [0]
 

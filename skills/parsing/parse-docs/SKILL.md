@@ -75,10 +75,10 @@ Every tool below is an agent skill published on [skills.sh](https://skills.sh). 
 npx skills add amgrbi96/amgrbi-skills
 
 # Or install one at a time by subpath
-npx skills add amgrbi96/amgrbi-skills/skills/pdf-to-markdown
-npx skills add amgrbi96/amgrbi-skills/skills/pymupdf-pdf
-npx skills add amgrbi96/amgrbi-skills/skills/liteparse
-npx skills add amgrbi96/amgrbi-skills/skills/mineru
+npx skills add amgrbi96/amgrbi-skills/skills/parsing/pdf-to-markdown
+npx skills add amgrbi96/amgrbi-skills/skills/parsing/pymupdf-pdf
+npx skills add amgrbi96/amgrbi-skills/skills/parsing/liteparse
+npx skills add amgrbi96/amgrbi-skills/skills/parsing/mineru
 ```
 
 Per-tool setup after install:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-test for the pdf-to-markdown skill.
 
-    python3 skills/pdf-to-markdown/evals/selftest.py
+    python3 skills/parsing/pdf-to-markdown/evals/selftest.py
 
 Run after changing bin/ wrappers or any documented claim in SKILL.md.
 Covers, in order:
