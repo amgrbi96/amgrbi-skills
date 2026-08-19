@@ -69,6 +69,28 @@ def default_tokens_file() -> Path:
     return Path(__file__).resolve().parent.parent / "tokens.txt"
 
 
+PAGES_RE = re.compile(r"\s*\d+(?:\s*-\s*\d+)?(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*\s*")
+
+
+def validate_page_ranges(parser, value: str, flag: str):
+    if not PAGES_RE.fullmatch(value):
+        parser.error(f'{flag} must look like "1-10,15,20-30"')
+    for part in value.split(","):
+        nums = [int(n) for n in part.split("-")]
+        if nums[0] < 1 or (len(nums) == 2 and nums[0] > nums[1]):
+            parser.error(f"invalid page range '{part.strip()}' in {flag} "
+                         "(pages start at 1, start must not exceed end)")
+
+
+def count_pages(value: str) -> int:
+    """Page count of a validated ranges expression, e.g. '1-10,15' -> 11."""
+    total = 0
+    for part in value.split(","):
+        nums = [int(n) for n in part.split("-")]
+        total += nums[-1] - nums[0] + 1
+    return total
+
+
 def load_tokens(args) -> list[str]:
     """Token sources, in priority order: --token, MINERU_TOKENS, MINERU_TOKEN, tokens.txt."""
     tokens = []
@@ -326,9 +348,10 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
                     if state == "done":
                         # 4. download + extract zip
                         print(" 📥", end="", flush=True)
+                        extract_dir = output_dir / out_stem
+                        extract_dir.mkdir(parents=True, exist_ok=True)  # probe writes into nested dirs
                         zip_path = output_dir / f"{out_stem}.zip"
                         zip_path.write_bytes(requests.get(results[0]["full_zip_url"], timeout=300).content)
-                        extract_dir = output_dir / out_stem
                         with zipfile.ZipFile(zip_path) as zf:
                             zf.extractall(extract_dir)
                         zip_path.unlink()
@@ -369,6 +392,28 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
 
     print(f" ❌ {last_err}")
     return False, stem, last_err
+
+
+def run_probe(pool: TokenPool, files: list[Path], output_dir: Path, args,
+              models: list[str], pages_expr: str | None) -> bool:
+    """Sample-parse each file with each model into output/<stem>-probe/<model>/.
+
+    Returns True when every probe succeeded. Sample dirs are stable across
+    models, so probing different models in separate runs coexists.
+    """
+    total = len(files) * len(models)
+    all_ok, i = True, 0
+    for f in files:
+        pages = pages_expr if f.suffix.lower() == ".pdf" else None
+        for model in models:
+            probe_opts = argparse.Namespace(**{**vars(args), "model": model, "pages": pages, "is_probe": True})
+            ok, _, _ = process_file(pool, f, output_dir / f"{f.stem}-probe" / model, i, total, probe_opts)
+            all_ok = all_ok and ok
+            i += 1
+        for model in models:
+            print(f"    {model}: {output_dir / f.stem}-probe/{model}/{f.stem}/{f.stem}.md")
+    pool.save_state()
+    return all_ok
 
 
 def ensure_online(output_dir: Path):
@@ -446,14 +491,16 @@ def main():
     parser.add_argument("--tokens-file", help=f"Read tokens from file, one per line (default: {default_tokens_file()})")
     parser.add_argument("--workers", "-w", type=int, default=5, help="Concurrent workers (default: 5)")
     parser.add_argument("--resume", action="store_true", help="Skip files whose output directory already exists")
-    parser.add_argument("--model", default="vlm", choices=["pipeline", "vlm", "MinerU-HTML"],
-                        help="Model version (default: vlm)")
+    parser.add_argument("--model", default=None, choices=["pipeline", "vlm", "MinerU-HTML"],
+                        help="Model version (default: vlm; with --probe: probe only this model)")
     parser.add_argument("--language", default="auto", choices=["auto", "en", "ch"],
                         help="Document language (default: auto)")
     parser.add_argument("--pages", help="Page ranges, e.g. '1-10,15,20-30' (bypasses the 200-page limit)")
     parser.add_argument("--extra-formats", help="Extra deliverables: comma list from docx,html,latex (default: none)")
     parser.add_argument("--probe", nargs="?", const=3, type=int, metavar="N",
-                        help="Sample-parse the first N pages (default: 3) with BOTH pipeline and vlm, then stop")
+                        help="Sample-parse to pick a model, then stop: first N pages (default: 3) "
+                             "or --probe-pages; runs pipeline+vlm, or only --model X")
+    parser.add_argument("--probe-pages", help="Probe specific pages instead of the first N, e.g. '85-87,203' (PDFs only)")
     parser.add_argument("--check-token", action="store_true",
                         help="Verify every pool token against the API (read-only, no page spend), then exit")
     parser.add_argument("--no-formula", action="store_true", help="Disable formula recognition")
@@ -466,20 +513,26 @@ def main():
         parser.error("--workers must be >= 1")
 
     if args.pages:
-        if not re.fullmatch(r"\s*\d+(?:\s*-\s*\d+)?(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*\s*", args.pages):
-            parser.error('--pages must look like "1-10,15,20-30"')
-        for part in args.pages.split(","):
-            nums = [int(n) for n in part.split("-")]
-            if nums[0] < 1 or (len(nums) == 2 and nums[0] > nums[1]):
-                parser.error(f"invalid page range '{part.strip()}' (pages start at 1, start must not exceed end)")
+        validate_page_ranges(parser, args.pages, "--pages")
         if args.dir:
             print("⚠️  --pages applies to every file in the directory")
 
+    probe_active = args.probe is not None or bool(args.probe_pages)
     if args.probe is not None:
         if args.pages:
             parser.error("--probe and --pages are mutually exclusive")
         if not 1 <= args.probe <= 200:
             parser.error("--probe must be between 1 and 200 pages")
+    if args.probe_pages:
+        if args.pages:
+            parser.error("--probe-pages and --pages are mutually exclusive")
+        validate_page_ranges(parser, args.probe_pages, "--probe-pages")
+
+    # probe configuration: explicit --model probes just it; otherwise pipeline+vlm
+    probe_models = [args.model] if (probe_active and args.model) else \
+                   (["pipeline", "vlm"] if probe_active else None)
+    probe_pages_expr = (args.probe_pages or f"1-{args.probe}") if probe_active else None
+    args.model = args.model or "vlm"  # full-parse default
 
     args.extra_formats_list = []
     if args.extra_formats:
@@ -525,10 +578,15 @@ def main():
         print("❌ No valid input files")
         sys.exit(1)
 
-    if args.probe is not None:
-        office = [f.name for f in input_files if f.suffix.lower() in (".docx", ".pptx")]
-        if office:
-            parser.error(f"--probe supports PDFs and images only (page ranges don't apply to: {', '.join(office)})")
+    if probe_active:
+        unsupported = [f.name for f in input_files
+                       if f.suffix.lower() not in (".pdf", ".jpg", ".jpeg", ".png")]
+        if unsupported:
+            parser.error(f"--probe supports PDFs and images only (page ranges don't apply to: {', '.join(unsupported)})")
+        img_ranges = [f.name for f in input_files
+                      if f.suffix.lower() in (".jpg", ".jpeg", ".png") and args.probe_pages]
+        if img_ranges:
+            parser.error(f"--probe-pages applies to PDFs only (images are single-page): {', '.join(img_ranges)}")
 
     # --- tokens ---
     tokens = load_tokens(args)
@@ -562,8 +620,11 @@ def main():
             print(f"⛔ All tokens exhausted or invalid today — parsing would fail. "
                   f"Add tokens or clear the state file tomorrow ({STATE_FILE}).")
             sys.exit(1)
-        note = (f" Probe planned: first {args.probe} page(s) × pipeline + vlm "
-                f"(~{2 * args.probe} pages/file of quota).") if args.probe is not None else ""
+        note = ""
+        if probe_models is not None:
+            cost = count_pages(probe_pages_expr) * len(probe_models)
+            note = (f"\n🔬 Probe planned: pages {probe_pages_expr} × {' + '.join(probe_models)} "
+                    f"(~{cost} pages/file of quota)")
         print(f"✅ Dry run OK — {len(input_files)} file(s), {total_mb:.1f} MB total, "
               f"{len(pool.available())} active token(s). Ready to parse.{note}")
         return
@@ -579,24 +640,14 @@ def main():
 
     ensure_online(output_dir)
 
-    if args.probe is not None:
-        print(f"\n🔬 Probing first {args.probe} page(s) with pipeline + vlm "
-              f"(~{2 * args.probe} pages/file of quota)")
-        total = len(input_files) * 2
-        all_ok, i = True, 0
-        for f in input_files:
-            pages = f"1-{args.probe}" if f.suffix.lower() == ".pdf" else None
-            for model in ("pipeline", "vlm"):
-                probe_opts = argparse.Namespace(**{**vars(args), "model": model, "pages": pages, "is_probe": True})
-                ok, _, _ = process_file(pool, f, output_dir / f"{f.stem}-probe" / model, i, total, probe_opts)
-                all_ok = all_ok and ok
-                i += 1
-            print(f"    pipeline: {output_dir / f.stem}-probe/pipeline/{f.stem}/{f.stem}.md")
-            print(f"    vlm:      {output_dir / f.stem}-probe/vlm/{f.stem}/{f.stem}.md")
-        pool.save_state()
+    if probe_models is not None:
+        cost = count_pages(probe_pages_expr) * len(probe_models)
+        print(f"\n🔬 Probing pages {probe_pages_expr} with {' + '.join(probe_models)} "
+              f"(~{cost} pages/file of quota)")
+        all_ok = run_probe(pool, input_files, output_dir, args, probe_models, probe_pages_expr)
         if all_ok:
-            print("\n🔬 Compare the two samples per file, then run the full parse with "
-                  "--model pipeline|vlm (plus --extra-formats / --no-formula / --no-table as needed)")
+            print("\n🔬 Compare the sample(s) per file, then run the full parse with "
+                  "--model <winner> (plus --extra-formats / --no-formula / --no-table as needed)")
         sys.exit(0 if all_ok else 1)
 
     success, failures = 0, []

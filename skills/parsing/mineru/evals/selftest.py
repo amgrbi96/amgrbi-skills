@@ -263,6 +263,31 @@ def unit_tests():
           and m.out_stem_for("book", SimpleNamespace(pages="1-3", is_probe=True)) == "book"
           and m.out_stem_for("book", opts()) == "book")
 
+    # --- run_probe: model modes, stable naming, page passthrough ---
+    (src / "pr.pdf").write_bytes(b"%PDF-1.4 fake")
+    probe_out = tdir / "probe_out"
+    probe_out.mkdir()
+    with mock.patch.object(m, "api_call", ok_api), \
+         mock.patch.object(m, "requests", mock.MagicMock(get=fake_get, put=fake_put)):
+        all_ok = m.run_probe(m.TokenPool(toks), [src / "pr.pdf"], probe_out, opts(),
+                             ["pipeline", "vlm"], "7-9")
+    check("probe: both models -> two sample dirs (stable names)",
+          all_ok
+          and (probe_out / "pr-probe" / "pipeline" / "pr" / "pr.md").exists()
+          and (probe_out / "pr-probe" / "vlm" / "pr" / "pr.md").exists(),
+          f"all_ok={all_ok}")
+    captured.clear()
+    with mock.patch.object(m, "api_call", cap_api), \
+         mock.patch.object(m, "requests", mock.MagicMock(get=fake_get, put=fake_put)):
+        all_ok = m.run_probe(m.TokenPool(toks), [src / "pr.pdf"], probe_out, opts(),
+                             ["MinerU-HTML"], "85-87,203")
+    check("probe: single model + custom pages passthrough",
+          all_ok and (probe_out / "pr-probe" / "MinerU-HTML" / "pr" / "pr.md").exists()
+          and captured["payload"].get("page_ranges") == "85-87,203"
+          and captured["payload"].get("model_version") == "MinerU-HTML",
+          f"all_ok={all_ok} payload={captured.get('payload')}")
+    check("probe: count_pages math", m.count_pages("1-10,15") == 11 and m.count_pages("85-87,203") == 4)
+
     # --- waste guards: pdf_precheck_warnings ---
     guard_dir = tdir / "guards"
     guard_dir.mkdir()
@@ -345,6 +370,7 @@ def cli_tests():
     (tdir / "in" / ".DS_Store").write_bytes(b"junk")
     (tdir / "other.pdf").write_bytes(b"%PDF-1.4 fake")
     (tdir / "doc.docx").write_bytes(b"PK fake")
+    (tdir / "img.jpg").write_bytes(b"\xff\xd8 jpg")
     tok = "fake-token-1234567890"
     (tdir / "no-tokens.txt").touch()  # exists but empty: hermetic default for --tokens-file
 
@@ -445,6 +471,20 @@ def cli_tests():
                                           "--probe", "--token", tok], 2, r"PDFs and images only")
     rt("cli: probe dry-run plans -> 0", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
                                          "--probe", "--token", tok, "--dry-run"], 0, r"Probe planned")
+    rt("cli: --probe-pages alone plans -> 0", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
+                                               "--probe-pages", "85-87,203", "--token", tok, "--dry-run"],
+       0, r"Probe planned: pages 85-87,203 × pipeline \+ vlm")
+    rt("cli: --probe-pages bad range -> 2", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
+                                             "--probe-pages", "9-5", "--token", tok], 2, r"--probe-pages")
+    rt("cli: --probe-pages + --pages -> 2", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
+                                             "--probe", "--probe-pages", "3", "--pages", "1-5",
+                                             "--token", tok], 2, r"mutually exclusive")
+    rt("cli: --probe-pages on image -> 2", ["--file", str(tdir / "img.jpg"), "--output", str(tdir / "o"),
+                                            "--probe", "--probe-pages", "3", "--token", tok],
+       2, r"applies to PDFs only")
+    rt("cli: probe respects --model -> 0", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
+                                            "--probe", "--model", "MinerU-HTML", "--token", tok, "--dry-run"],
+       0, r"× MinerU-HTML")
     rt("cli: bad --extra-formats -> 2", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),
                                          "--extra-formats", "pdf,docx", "--token", tok], 2, r"unknown 'pdf'")
     rt("cli: good --extra-formats -> 0", ["--file", str(tdir / "other.pdf"), "--output", str(tdir / "o"),

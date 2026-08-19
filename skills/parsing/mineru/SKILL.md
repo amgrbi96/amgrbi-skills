@@ -167,10 +167,15 @@ python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --model vlm
 ### Sample Probe (pick a model empirically)
 
 ```bash
-python3 scripts/mineru_v2.py --file ./paper.pdf --output ./output/ --probe   # first 3 pages, both models
+python3 scripts/mineru_v2.py --file ./book.pdf --output ./probe/ --probe                            # pages 1-3, pipeline + vlm
+python3 scripts/mineru_v2.py --file ./book.pdf --output ./probe/ --probe --probe-pages "85-87,203"  # pages you know are hard
+python3 scripts/mineru_v2.py --file ./book.pdf --output ./probe/ --probe --model MinerU-HTML        # one model only
 ```
 
-Parses the sample with `pipeline` AND `vlm` side by side into `output/<name>-probe/`, ~2×3 pages of quota per file. Compare the two `.md` files, then run the full parse with `--model <winner>`. PDFs and images only — page ranges don't apply to Office files.
+- **Pages:** first N by default (`--probe 5`), or exact pages via `--probe-pages` — pick the hardest pages (formulas, dense tables, multi-column), not the title page. PDFs only.
+- **Models:** no `--model` → `pipeline` + `vlm` side by side (comparison mode); `--model X` → probe just X. Each model writes its own folder, so probing different models across runs coexists.
+- **Output:** `output/<name>-probe/<model>/<name>/<name>.md` — compare with `code -d fileA fileB`, then run the full parse with `--model <winner>`.
+- **Cost:** pages × models (~6 pages of quota for the default probe). PDFs and images only — Office files aren't page-addressable.
 
 ## CLI Options
 
@@ -182,11 +187,12 @@ Parses the sample with `pipeline` AND `vlm` side by side into `output/<name>-pro
 --tokens-file PATH  Read tokens from file, one per line (default: <skill>/tokens.txt)
 --workers N         Concurrent workers, >= 1 (default: 5)
 --resume            Report already-processed files up front and drop them from the run
---model MODEL       pipeline | vlm | MinerU-HTML (default: vlm)
+--model MODEL       pipeline | vlm | MinerU-HTML (default: vlm; with --probe: probe only this model)
 --language LANG     auto | en | ch (default: auto)
 --pages RANGES      Page ranges, e.g. "1-10,15,20-30" (validated; applies to every file with --dir)
 --extra-formats F   Extra deliverables: comma list from docx,html,latex (default: none)
---probe [N]         Sample-parse first N pages with both models, then stop (default: 3)
+--probe [N]         Sample-parse first N pages to pick a model, then stop (default: 3)
+--probe-pages RANGES Probe specific pages instead of the first N, e.g. "85-87,203" (PDFs only)
 --check-token       Verify pool tokens against the API (read-only), then exit
 --no-formula        Disable formula recognition
 --no-table          Disable table extraction
