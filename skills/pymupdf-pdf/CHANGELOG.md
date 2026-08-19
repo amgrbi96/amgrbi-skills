@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0 (2026-08-19)
+
+### Added
+- `--md-engine auto|basic|pymupdf4llm` (default `auto`): high-quality Markdown via
+  pymupdf4llm (headers, real tables) when installed, automatic fallback to basic;
+  explicit request without the package exits 1 with an install hint
+- Chosen engine recorded in the JSON summary (`md_engine`) and dry-run output
+- SKILL.md: engine guide, manipulation routing pointer (merge/split/forms → pdf
+  document-production skill, not this one)
+
 ## v0.2.0 (2026-08-19)
 
 ### Added

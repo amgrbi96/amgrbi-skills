@@ -14,7 +14,7 @@ metadata:
       - id: pip-optional
         kind: pip
         packages: ["pymupdf4llm"]
-        label: "Optional: layout detection addon (pymupdf.layout)"
+        label: "Optional: better Markdown engine + layout detection addon"
 ---
 
 # PyMuPDF PDF
@@ -58,7 +58,7 @@ python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect: 1.24.x or la
 
 Troubleshooting: NixOS `libstdc++` import failures and other notes live in `references/pymupdf-notes.md`.
 
-Optional — layout detection (`pymupdf.layout`, see below) additionally needs:
+Optional but recommended — `pymupdf4llm` unlocks the higher-quality Markdown engine (headers, real tables) and layout detection (see below):
 
 ```bash
 pip install pymupdf4llm
@@ -80,11 +80,22 @@ Always validate first — checks the file and opens the PDF without writing anyt
 
 ## Options
 - `--format md|json|both` (default: `md`)
+- `--md-engine auto|basic|pymupdf4llm` (default: `auto` — uses pymupdf4llm when installed, else basic)
 - `--images` to extract images
 - `--tables` to extract a simple line-based table JSON (quick/rough)
 - `--outroot DIR` to change output root (default: `./pymupdf-output`)
 - `--lang` adds a language hint into JSON output metadata (default: `en`)
 - `--dry-run` to validate the input PDF and exit without writing anything
+
+## Markdown engine guide
+
+| Engine | Speed | Quality | Notes |
+|---|---|---|---|
+| `auto` | — | — | picks `pymupdf4llm` if installed, else `basic` (default) |
+| `pymupdf4llm` | 🐢 Slower | High | Headers, real Markdown tables, preserves structure; needs `pip install pymupdf4llm` |
+| `basic` | ⚡ Fastest | OK | `get_text("markdown")`, `<!-- page N -->` markers per page |
+
+Requesting `pymupdf4llm` explicitly exits 1 with an install hint if the package is missing; `auto` silently falls back to `basic`. The chosen engine is recorded in the JSON summary (`md_engine`).
 
 ## Error handling
 - Pre-flight checks reject: missing file, non-PDF extension, empty file, corrupt PDF, password-protected PDF — each with a one-line error
@@ -169,6 +180,7 @@ img.save("table.png")
 | Crop table/figure images from PDF | `pymupdf.layout` bboxes → `get_pixmap(clip=...)` |
 | Fast text extraction | PyMuPDF `page.get_text()` |
 | Higher accuracy layout with formula recognition | MinerU (cloud VLM) |
+| PDF creation/manipulation (merge, split, rotate, forms, render) | **Not this skill** — use the `pdf` document-production skill (e.g. anthropics/skills@pdf) |
 
 ## Notes
 - PyMuPDF is fast but less robust on complex PDFs.

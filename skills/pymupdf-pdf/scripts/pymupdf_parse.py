@@ -5,6 +5,8 @@ PyMuPDF local PDF parser — PDF → Markdown/JSON (+ optional images/tables).
 Design goals (fast local alternative to cloud parsers):
 - Pre-flight checks: file existence, extension, size, valid unencrypted PDF
 - --dry-run: validate the input and exit without writing anything
+- Markdown engine choice: basic (get_text) or pymupdf4llm (headers, real
+  tables, auto; falls back to basic if the extra package is absent)
 - Clear error when PyMuPDF is missing — no stack trace
 - Exit codes: 0 = success (or dry-run OK), 1 = bad input / missing dep / parse failure
 - JSON summary at the end for machine consumption
@@ -69,6 +71,19 @@ def extract_markdown(doc) -> str:
     return "".join(parts).strip() + "\n"
 
 
+def has_pymupdf4llm() -> bool:
+    try:
+        import pymupdf4llm  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def extract_markdown_4llm(doc) -> str:
+    import pymupdf4llm  # lazy: keeps the basic engine dependency-free
+    return pymupdf4llm.to_markdown(doc).strip() + "\n"
+
+
 def extract_json(doc, lang: str) -> dict:
     pages = []
     for i, page in enumerate(doc, start=1):
@@ -112,6 +127,9 @@ def main():
     parser.add_argument("pdf", help="Path to PDF")
     parser.add_argument("--outroot", default="./pymupdf-output", help="Output root dir (default: ./pymupdf-output)")
     parser.add_argument("--format", default="md", choices=["md", "json", "both"], help="Output format (default: md)")
+    parser.add_argument("--md-engine", default="auto", choices=["auto", "basic", "pymupdf4llm"],
+                        help="Markdown engine: auto uses pymupdf4llm when installed (headers, real tables), "
+                             "else basic (default: auto)")
     parser.add_argument("--images", action="store_true", help="Extract images")
     parser.add_argument("--tables", action="store_true", help="Extract simple tables (lines)")
     parser.add_argument("--lang", default="en", help="Language hint recorded in JSON output (default: en)")
@@ -137,6 +155,17 @@ def main():
     size_mb = pdf_path.stat().st_size / 1024 / 1024
     print(f"📄 {pdf_path.name} — {doc.page_count} pages, {size_mb:.1f} MB")
 
+    # --- resolve markdown engine ---
+    if args.md_engine == "pymupdf4llm" and not has_pymupdf4llm():
+        print("❌ --md-engine pymupdf4llm requested but pymupdf4llm is not installed: "
+              "pip install pymupdf4llm")
+        doc.close()
+        sys.exit(1)
+    md_engine = args.md_engine
+    if md_engine == "auto":
+        md_engine = "pymupdf4llm" if has_pymupdf4llm() else "basic"
+    print(f"⚙️  Markdown engine: {md_engine}")
+
     if args.dry_run:
         print(f"✅ Dry run OK — valid PDF, {doc.page_count} pages. Ready to parse.")
         doc.close()
@@ -152,9 +181,10 @@ def main():
     try:
         if args.format in ("md", "both"):
             md_path = outdir / "output.md"
-            md_path.write_text(extract_markdown(doc), encoding="utf-8")
+            md_text = extract_markdown_4llm(doc) if md_engine == "pymupdf4llm" else extract_markdown(doc)
+            md_path.write_text(md_text, encoding="utf-8")
             outputs.append(str(md_path))
-            print(f"📝 {md_path}")
+            print(f"📝 {md_path} (engine: {md_engine})")
 
         if args.format in ("json", "both"):
             data = extract_json(doc, args.lang)
@@ -187,6 +217,7 @@ def main():
     print(f"📊 Summary (JSON):\n{json.dumps({
         'file': str(pdf_path),
         'pages': page_count,
+        'md_engine': md_engine if args.format in ("md", "both") else None,
         'status': 'ok',
         'outputs': outputs,
         'elapsed_sec': round(elapsed, 2),
