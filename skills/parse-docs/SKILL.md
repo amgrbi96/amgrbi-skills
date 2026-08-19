@@ -273,6 +273,7 @@ python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode 
 
 # Run (speed: PDFs → pdf-to-markdown, everything else → liteparse)
 python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder
+# add --format txt for liteparse plain-text output instead of Markdown
 
 # Run (accuracy: mineru-first for its formats — requires --mineru + tokens)
 python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder --prefer accuracy --mineru
