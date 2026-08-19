@@ -14,9 +14,17 @@ Parse unstructured documents (PDF, DOCX, PPTX, XLSX, images) locally with LitePa
 
 All commands and outputs below were **verified Aug 2026** against `@llamaindex/liteparse` 2.13.1 on macOS arm64.
 
+## Defaults — OCR and LibreOffice are opt-in
+
+Both cost the user something (network download, 800 MB install), so neither runs or installs silently:
+
+1. **OCR is off by default.** The CLI enables OCR unless told otherwise — so always pass `--no-ocr` explicitly. Turn OCR on **only** when the gate below says so (`lit is-complex` → `needsOcr: true` with `textLength: 0`, or a parse came back empty) **and** the user approved. First run per language downloads ~15 MB over the network.
+2. **LibreOffice is never auto-installed.** Offer it — stating the 800 MB size — only when the user actually needs an Office format parsed locally. Install only after explicit approval. If the user declines, route Office files to `mineru` (cloud converts them with zero local install) or a lighter skill.
+3. **Try lighter skills first for text-layer PDFs** (`pdf-to-markdown`, `pymupdf-pdf`). Escalate to this skill's OCR only when those fail or return empty — that failure is the "needed" signal.
+
 ## Setup
 
-Run the pre-flight first, then install only what is missing for the formats at hand. Images and PDFs need nothing beyond the CLI; Office formats additionally need LibreOffice.
+Run the pre-flight first, then install only what is missing for the formats at hand — asking before every install beyond the CLI. Images and PDFs need nothing beyond the CLI; Office formats additionally need LibreOffice (opt-in, see Defaults).
 
 ### Pre-flight (run before parsing)
 
@@ -37,7 +45,7 @@ lit parse --help >/dev/null && echo "install ok"
 
 `lit parse --help` is the right verification: it loads the native platform binary at startup and fails loudly if the install is broken. Don't use `lit --version` — it prints a hardcoded `2.0.0` regardless of the installed package.
 
-2. **LibreOffice — only for Office formats (DOCX/PPTX/XLSX/ODT/RTF/CSV):** ~700 MB, so skip it when the task only touches PDFs or images. If it's missing, Office files fail immediately with a clear exit-1 error listing these same commands; PDFs and images are unaffected.
+2. **LibreOffice — opt-in, user approval required (only for Office formats: DOCX/PPTX/XLSX/ODT/RTF/CSV):** ~800 MB. Offer it with the size stated; never install unprompted. If it's missing, Office files fail immediately with a clear exit-1 error listing these same commands; PDFs and images are unaffected.
 
 ```bash
 brew install --cask libreoffice     # macOS
@@ -75,20 +83,21 @@ Office documents are converted to PDF via LibreOffice first, then parsed. Anythi
 
 ## Commands
 
-### Single File → Text (default)
+### Single File → Text (default: no OCR)
 
 ```bash
-lit parse document.pdf
+lit parse document.pdf --no-ocr
 ```
 ```text
-[liteparse] extract: 9.2ms (1 pages)
-[liteparse] ocr render: 4.7ms (1 pages)
-[liteparse] ocr: 289.0ms
+[liteparse] extract: 23.1ms (1 pages)
+[liteparse] ocr: 0.0ms
 ...
-Invoice 2026-08-19
+LiteParse Audit Report
 
-Total due: 142.50 USD
+Section 1: Introduction
 ```
+
+The CLI turns OCR **on** by default — always pass `--no-ocr` unless the OCR gate below passed and the user approved (see Defaults).
 
 Add `-q`/`--quiet` to suppress the `[liteparse]` timing lines on stderr. Read from stdin with `lit parse -` (e.g. `curl -sL url/file.pdf | lit parse -`).
 
@@ -130,9 +139,9 @@ Output structure (verified):
 
 Optional JSON extras (each adds fields): `--extract-images` (+`--image-output-dir <dir>` to write bytes), `--extract-annotations`, `--extract-form-fields`, `--extract-blocks`, `--extract-structure-tree`, `--extract-vector-graphics`, `--extract-text-metadata`, `--complexity`.
 
-### Pre-flight: Does This File Need OCR?
+### The OCR Gate — run before ever dropping `--no-ocr`
 
-`is-complex` is a cheap text-layer-only pass — use it to decide between `--no-ocr` (fast path) and full OCR:
+`is-complex` is a cheap text-layer-only pass. It decides whether OCR is warranted at all; only a positive gate **plus user approval** turns OCR on:
 
 ```bash
 lit is-complex scan.png
@@ -149,17 +158,19 @@ lit is-complex scan.png
 ]
 ```
 
-Reasons: `scanned`, `no-text`, `sparse-text`, `embedded-images`, `garbled`, `vector-text`, `annotation-text`. Caveat (verified): it is conservative — a short text-layer memo flags `sparse-text`/`needsOcr: true` even when the text layer is fine. Check `textLength` before routing; don't blindly trust the flag.
+Reading the verdict: `needsOcr: true` **with `textLength: 0`** (reasons like `scanned`, `no-text`, `garbled`) → offer OCR to the user. Reasons: `scanned`, `no-text`, `sparse-text`, `embedded-images`, `garbled`, `vector-text`, `annotation-text`. Caveat (verified): it is conservative — a short text-layer memo flags `sparse-text`/`needsOcr: true` even when the text layer is fine. Check `textLength` before routing; don't blindly trust the flag.
 
-### Page Ranges, No-OCR, DPI
+### Page Ranges, DPI, and OCR (gated)
 
 ```bash
+lit parse document.pdf --no-ocr                # DEFAULT — always start here
 lit parse document.pdf --target-pages "1-5,10,15-20"
 lit parse document.pdf --max-pages 50          # hard limit (default: 1000)
-lit parse document.pdf --no-ocr                # text-layer PDFs — much faster
+lit parse document.pdf --password secret       # encrypted documents
+
+# OCR variants — only after the gate passed AND the user approved:
 lit parse document.pdf --ocr-language fra      # Tesseract code; default eng
 lit parse document.pdf --dpi 300               # default 150
-lit parse document.pdf --password secret       # encrypted documents
 ```
 
 ### External OCR Server (higher accuracy than built-in Tesseract)
@@ -181,8 +192,8 @@ lit screenshot document.pdf --target-pages "1,3,5" -o ./screenshots
 ### Batch Directory
 
 ```bash
-lit batch-parse ./input ./output --recursive            # → "batch complete: 2 succeeded, 0 failed"
-lit batch-parse ./input ./output --extension .pdf --format markdown
+lit batch-parse ./input ./output --recursive --no-ocr   # → "batch complete: 2 succeeded, 0 failed"
+lit batch-parse ./input ./output --extension .pdf --format markdown --no-ocr
 ```
 
 Writes one file per input named `<stem>.<txt|json|md>` directly in the output dir — **files with the same stem overwrite each other** (verified: `a.docx` and `a.png` both produce `a.txt`). Keep stems unique in batch inputs.
