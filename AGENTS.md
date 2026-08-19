@@ -45,7 +45,7 @@ Skills without a suite are checked with their script's `--help`.
 - **mineru** — cloud-only (never the local `mineru` CLI). Python 3.10+ enforced at runtime; `requests` required for parsing but not `--help`/`--dry-run`. Tokens: `MINERU_TOKEN(S)` env or `skills/parsing/mineru/tokens.txt` (gitignored — never commit). Quota model: 1000 pages/token/day, 200 MB / 200 pages per file; `--pages` chunks write per-range folders. Its selftest is hermetic (real env tokens/tokens.txt are stripped).
 - **liteparse** — global `lit` CLI; `lit --version` is misleading (hardcoded), verify with `lit parse --help`. OCR and LibreOffice are opt-in.
 - **pdf-to-markdown** — arm64 Linux/macOS only (Intel Macs unsupported); `bin/check-env` pre-flight, binary self-installs on first run.
-- **parse-docs** — the router; keep its command blocks and limits table in sync when sibling parsers change.
+- **parse-docs** — the router; Single mode shortlists then asks the user to pick the parser (quick comparison per option); keep its command blocks and limits table in sync when sibling parsers change.
 
 ## Modifying Skills
 

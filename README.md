@@ -64,14 +64,14 @@ Each skill folder is self-contained: a `SKILL.md` with frontmatter (`name`, `des
 
 ## Picking a Parser
 
-Unsure which document parser to use? Load `parse-docs` and let it route, or use this shortcut:
+Unsure which document parser to use? Load `parse-docs` — it shortlists the fitting parsers and asks you to pick, with a quick comparison in each option — or use this shortcut:
 
 | You need… | Use |
 |---|---|
 | Speed, just the text | `pdf-to-markdown` |
 | Local layout boxes / table crops | `pymupdf-pdf` |
 | DOCX / PPTX / XLSX / images + OCR | `liteparse` |
-| Formulas, multi-column, highest accuracy | `mineru` |
+| Best tables, formulas, multi-column, highest accuracy | `mineru` |
 
 ## Development
 

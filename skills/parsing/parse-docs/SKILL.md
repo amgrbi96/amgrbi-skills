@@ -1,15 +1,15 @@
 ---
 name: parse-docs
-description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. Three modes: single document (decision tree), folder batch (per-file routing + resume), or all-methods (every applicable tool per document). Use this skill before parsing any document (PDF, DOCX, PPTX, XLSX, images) — it checks which tools are installed and routes to the best fit. Use when the user mentions parsing, extracting text, converting a document, OCR, tables, drug dosing data, or batch processing — even casually ("grab the text", "read this", "pull content from").'
+description: 'Routes document parsing to the right tool — pdf-to-markdown for fast Markdown, pymupdf-pdf for local layout/tables, liteparse for multi-format OCR/tables, or mineru for cloud VLM accuracy. Three modes: single document (decision tree shortlist, then the user picks), folder batch (per-file routing + resume), or all-methods (every applicable tool per document). Use this skill before parsing any document (PDF, DOCX, PPTX, XLSX, images) — it checks which tools are installed, shortlists the fitting ones, and asks the user to choose, with a quick comparison in each option. Use when the user mentions parsing, extracting text, converting a document, OCR, tables, drug dosing data, or batch processing — even casually ("grab the text", "read this", "pull content from").'
 ---
 
 # Parse Docs — Document Router
 
-Routes parsing jobs to one of four installed tools. Pick a mode, then follow its section.
+Routes parsing jobs to one of four installed tools. Pick a mode, then follow its section. In Single mode you never pick silently: shortlist the fitting tools, then **let the user decide** — see "Ask, don't assume".
 
 | Mode | What it does | How |
 |---|---|---|
-| **Single** (default) | Route one document via the decision tree | documented commands below |
+| **Single** (default) | Shortlist via decision tree; the user picks the parser | documented commands below |
 | **Folder** | Route each file in a directory independently; resume-safe batch | `scripts/parse_folder.py --mode folder` |
 | **All-methods** | Run every applicable tool on each document | `scripts/parse_folder.py --mode all` |
 
@@ -92,7 +92,34 @@ Per-tool setup after install:
 
 ## Mode 1 — Single document (default)
 
-Walk the decision tree top to bottom; first match wins. Then run the tool directly with the commands under "Running the chosen tool".
+Use the decision tree to **shortlist** the installed tools that can handle the document and to form a recommendation. If the shortlist has more than one tool, ask the user to choose (next section) — don't decide for them. Then run the chosen tool with the commands under "Running the chosen tool".
+
+### Ask, don't assume — the user picks the parser
+
+When more than one installed, format-compatible tool fits, **ask the user which one to use**, and put a quick comparison inside each option of the question so the choice is self-explanatory. Mark your recommendation (first option, from the tree) but let the user override it. Only skip asking when exactly one tool fits (format lockout — e.g. `.xlsx` → liteparse, formulas → mineru) or the user already named the tool.
+
+One-line comparisons to reuse in option descriptions — drop tools that are inapplicable or uninstalled, and lead with what matters for *this* document (tables, speed, privacy, formulas):
+
+| Option | Description to show in the question |
+|---|---|
+| **pdf-to-markdown** | Fastest + local. PDF → Markdown with structure; tables as HTML. No OCR, no formulas — text layer only. |
+| **pymupdf-pdf** | Local PDF workbench. Markdown/JSON, tables with cell coordinates, image export. Fast; no OCR. |
+| **liteparse** | Local, widest formats (DOCX/PPTX/XLSX/images). Cell-accurate tables; OCR opt-in (~0.3s/pg). |
+| **mineru** | Cloud VLM, highest accuracy: **best tables** (merged/complex too), formulas → LaTeX, scanned docs. Slowest; needs token + network, spends quota. |
+
+Example question for a text-layer, table-heavy PDF:
+
+> **"Which parser for report.pdf (217 pages, text layer, heavy tables)?"**
+> - **mineru** *(Recommended)* — "Best table accuracy (VLM) + formula support; cloud, ~2-5 min, spends ~217 pages of quota."
+> - **pdf-to-markdown** — "Fastest, local (~1-2s); tables come out as HTML, fine for reading not for exact cell data."
+> - **liteparse** — "Local; cell-accurate tables, but slower than pdf-to-markdown on big PDFs."
+> - **pymupdf-pdf** — "Local; tables with coordinates as JSON/MD — good for locating cells, weaker on complex merges."
+
+Tailor the lead phrase to the document (scanned → lead with OCR quality; private data → lead with local vs cloud; huge PDF → lead with speed). If you can't tell what matters, this question is how you find out — the comparisons do the explaining.
+
+### Decision tree (shortlist + recommendation)
+
+Walk top to bottom; a matching rule adds its tools to the shortlist.
 
 ### 1. Non-PDF files → liteparse or mineru
 
@@ -135,12 +162,12 @@ User wants bounding boxes, block-level layout, or to crop table/figure regions
   the parse script itself does not emit boxes — see the pymupdf-pdf SKILL.md)
 ```
 
-### 6. Need accurate table data (drug doses, criteria, structured tables) → liteparse or mineru
+### 6. Need accurate table data (drug doses, criteria, structured tables) → mineru or liteparse
 
 ```
 Tables where cell-to-value mapping matters (clinical dosing, criteria lists)
-→ liteparse (local, preserves mappings)
-→ mineru if tables are complex/merged (cloud, VLM)
+→ mineru — best table accuracy (VLM; handles merged/complex cells), cloud
+→ liteparse — local/private fallback, preserves cell-to-value mappings
 ```
 
 ### 7. User explicitly wants JSON / bounding boxes → liteparse or pymupdf-pdf
@@ -181,13 +208,6 @@ User needs the whole document AND accurate tables
 ```
 Summary, overview, quick extraction from a large PDF
 → pdf-to-markdown (fast), then summarize from the Markdown
-```
-
-### 12. Ambiguous → ask one question
-
-```
-Can't determine intent from context
-→ "Do you need exact tables/formulas (mineru/liteparse), or is fast text enough (pdf-to-markdown)?"
 ```
 
 ### Running the chosen tool
@@ -284,6 +304,8 @@ Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/toke
 
 One run over a directory: each file is typed and routed independently (a `.docx` and a `.pdf` in the same folder go to different tools), outputs land per document, and re-runs skip finished work.
 
+Two routing preferences exist — **ask the user which one** before running: *speed* (local tools only, free, fastest) vs *accuracy* (mineru-first for its formats; needs `--mineru` + tokens and spends quota — relay the printed cost).
+
 ```bash
 # Plan first — no files touched
 python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder --dry-run
@@ -371,7 +393,7 @@ This skill handles **content extraction** only. For everything else:
 
 1. **Pick the mode** — one document → Single; a folder to parse once → Folder; compare/extract with every tool → All-methods
 2. **Identify the input** — check extension, size, page count; for folders, run the orchestrator's `--dry-run`
-3. **Apply routing** — decision tree (Single) or the script's type table (Folder/All)
+3. **Shortlist, then ask** — decision tree shortlists (Single); ask the user to pick with quick comparisons in the options; Folder/All use the script's type table (ask speed vs accuracy for `--prefer`)
 4. **Run** — execute the command; for mineru in bulk, relay the quota cost first
 5. **Verify** — check exit code and output size (tiny output = scanned/failure; the orchestrator flags these)
 6. **Report** — where the output is, which tool(s) ran, what was skipped and why
