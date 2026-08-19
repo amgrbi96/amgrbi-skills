@@ -11,6 +11,10 @@ Local tools always run when installed. mineru (cloud) runs only when BOTH
 --mineru is passed AND tokens are configured — validated first with the
 mineru script's own --dry-run, which works offline.
 
+OCR policy (mirrors the liteparse skill): liteparse runs with --no-ocr on
+text-layer documents; OCR stays on only for image files and the gated
+scanned-PDF fallback (an empty parse IS the gate). --no-ocr disables both.
+
 Resume: a document+tool whose output already exists (and is non-empty for
 the local text tools) is skipped, so re-runs never redo work or re-spend
 mineru quota.
@@ -31,6 +35,7 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 TOOLS = {
     "pdf-to-markdown": SKILL_DIR / ".." / "pdf-to-markdown" / "bin" / "pdf-to-markdown",
     "pymupdf": SKILL_DIR / ".." / "pymupdf-pdf" / "scripts" / "pymupdf_parse.py",
+    "pymupdf-ops": SKILL_DIR / ".." / "pymupdf-pdf" / "scripts" / "pdf_ops.py",
     "mineru": SKILL_DIR / ".." / "mineru" / "scripts" / "mineru_v2.py",
 }
 MINERU_TOKENS_FILE = SKILL_DIR / ".." / "mineru" / "tokens.txt"
@@ -43,6 +48,10 @@ LITEPARSE_ONLY_EXTS = {
     ".gif", ".bmp", ".tiff", ".webp", ".svg",             # images mineru can't
 }
 PDF_EXTS = {".pdf"}
+# Images have no text layer — OCR is the only way in (the liteparse OCR gate
+# trivially passes for them), so liteparse runs WITH OCR on these and with
+# --no-ocr on everything else, per the liteparse skill's opt-in policy.
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg"}
 
 
 def applicable_tools(ext: str) -> list[str]:
@@ -78,7 +87,8 @@ def detect_tools(mineru_wanted: bool) -> dict:
     """Which tools are usable on this machine right now."""
     available = {
         "pdf-to-markdown": os.access(TOOLS["pdf-to-markdown"], os.X_OK),
-        "pymupdf": TOOLS["pymupdf"].is_file() and _pymupdf_importable(),
+        "pymupdf": (TOOLS["pymupdf"].is_file() and TOOLS["pymupdf-ops"].is_file()
+                    and _pymupdf_importable()),
         "liteparse": shutil.which("lit") is not None,
     }
     # mineru: script present, this interpreter is 3.10+ (script requirement),
@@ -209,8 +219,14 @@ def already_done(f: Path, tool: str, output: Path, fmt: str) -> str | None:
     return None
 
 
-def run_tool(f: Path, tool: str, output: Path, fmt: str) -> tuple[bool, str]:
-    """Run one tool on one file. Returns (ok, detail)."""
+def run_tool(f: Path, tool: str, output: Path, fmt: str,
+             ocr: bool = False) -> tuple[bool, str]:
+    """Run one tool on one file. Returns (ok, detail).
+
+    `ocr` only affects liteparse: True keeps its default OCR on (images, or
+    the gated scanned-PDF fallback); False passes --no-ocr per the liteparse
+    skill's opt-in policy.
+    """
     doc, stem = f.name, f.stem
     d = out_dir(output, doc, tool)
     d.mkdir(parents=True, exist_ok=True)
@@ -245,13 +261,14 @@ def run_tool(f: Path, tool: str, output: Path, fmt: str) -> tuple[bool, str]:
     if tool == "liteparse":
         out = d / f"{stem}.{fmt}"
         format_flag = "markdown" if fmt == "md" else "text"
-        r = subprocess.run(
-            ["lit", "parse", str(f), "--format", format_flag, "-q", "-o", str(out)],
-            capture_output=True, text=True)
+        cmd = ["lit", "parse", str(f), "--format", format_flag, "-q", "-o", str(out)]
+        if not ocr:
+            cmd.append("--no-ocr")
+        r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
             detail = (r.stderr or r.stdout or "").strip().splitlines()
             return False, (detail[-1] if detail else "empty output") + \
-                " (empty OCR = degraded scan; try mineru)"
+                " (empty = scanned/degraded scan; needs OCR or mineru)"
         return True, str(out)
 
     if tool == "mineru":
@@ -293,6 +310,9 @@ def main():
                         help="liteparse output format (default: md)")
     parser.add_argument("--mineru", action="store_true",
                         help="allow cloud mineru runs (needs tokens; quota is spent)")
+    parser.add_argument("--no-ocr", action="store_true",
+                        help="never run OCR: liteparse always gets --no-ocr and the "
+                             "scanned-PDF fallback is disabled (images likely yield empty output)")
     parser.add_argument("--dry-run", action="store_true",
                         help="show the routing plan, resume skips, and mineru quota — run nothing")
     args = parser.parse_args()
@@ -313,7 +333,7 @@ def main():
     missing = [t for t, ok in available.items() if not ok]
     if missing:
         reasons = {"pdf-to-markdown": "binary missing",
-                   "pymupdf": "script or pymupdf package missing",
+                   "pymupdf": "script (pymupdf_parse.py / pdf_ops.py) or pymupdf package missing",
                    "liteparse": "`lit` not on PATH",
                    "mineru": "no --mineru flag, no tokens, script missing, or Python < 3.10"}
         print("⚠️  unavailable tools (files route to what's installed):")
@@ -359,18 +379,20 @@ def main():
         if args.dry_run:
             print(f"  ▶ {f.name} → {r['tool']}  ({out_dir(output, f.name, r['tool'])})")
             continue
-        ok, detail = run_tool(f, r["tool"], output, args.format)
+        wants_ocr = not args.no_ocr and f.suffix.lower() in IMAGE_EXTS
+        ok, detail = run_tool(f, r["tool"], output, args.format, ocr=wants_ocr)
         mark = "✅" if ok else "❌"
         print(f"  {mark} {f.name} → {r['tool']}" + ("" if ok else f"  — {detail}"))
         if ok:
             results["done"].append((f.name, r["tool"]))
             continue
-        # folder mode: one-shot fallback for scanned PDFs (empty fast output)
-        if args.mode == "folder":
+        # folder mode: one-shot fallback for scanned PDFs (empty fast output).
+        # The empty result is the liteparse skill's OCR-gate "needed" signal.
+        if args.mode == "folder" and not args.no_ocr:
             fb = fallback_tool(f, r["tool"], available)
             if fb and not already_done(f, fb, output, args.format):
-                ok2, detail2 = run_tool(f, fb, output, args.format)
-                print(f"  {'✅' if ok2 else '❌'} {f.name} → {fb} (fallback)"
+                ok2, detail2 = run_tool(f, fb, output, args.format, ocr=True)
+                print(f"  {'✅' if ok2 else '❌'} {f.name} → {fb} (OCR fallback)"
                       + ("" if ok2 else f"  — {detail2}"))
                 if ok2:
                     results["done"].append((f.name, fb))

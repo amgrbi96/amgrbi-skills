@@ -22,12 +22,12 @@ Folder and all-methods use the orchestration script because the per-document out
 | **Binary** | `$SKILL_DIR/../pdf-to-markdown/bin/pdf-to-markdown` | `$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py` | `lit` (global CLI) | `$SKILL_DIR/../mineru/scripts/mineru_v2.py` |
 | **Formats** | PDF only | PDF only | PDF, DOCX/ODT/RTF, PPTX/ODP, XLSX/ODS/CSV, jpg/png/gif/bmp/tiff/webp/svg | PDF, DOCX, PPTX, jpg/jpeg/png **only** |
 | **Output** | Structured Markdown | Markdown / JSON / images / tables | Text/Markdown/JSON + bounding boxes | Markdown + images + metadata |
-| **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast (local) | 🐢 ~0.03s/pg text-layer; OCR adds ~0.3s/pg | 🐢 Slowest (cloud round-trip) |
+| **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast basic engine; slower with `pymupdf4llm` (auto) | 🐢 ~0.03s/pg text-layer (`--no-ocr`); OCR adds ~0.3s/pg | 🐢 Slowest (cloud round-trip) |
 | **Tables** | HTML tables, columns preserved | Native `find_tables()` — bbox + rows | Preserves cell-to-value mappings | Best (VLM) |
 | **Formulas** | None | None | None | LaTeX recognition |
-| **OCR** | None | None | Tesseract.js (built-in) | Cloud VLM (best) |
+| **OCR** | None | None | Built-in Tesseract (opt-in — gate first) | Cloud VLM (best) |
 | **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pages/day **per token** (poolable) |
-| **Needs** | curl/wget + network (first run) | PyMuPDF installed | Node + `lit` + LibreOffice (Office) | Internet + token + Python 3.10+ + `requests` |
+| **Needs** | curl/wget + network (first run) | PyMuPDF ≥1.23 installed | Node + `lit` (+ LibreOffice for Office, opt-in ~800 MB) | Internet + token + Python 3.10+ + `requests` |
 
 Set `$SKILL_DIR` to the absolute path of **this** skill's directory (the one containing this SKILL.md). All four sibling skills resolve as `$SKILL_DIR/../<name>/`.
 
@@ -87,7 +87,7 @@ Per-tool setup after install:
 |---|---|
 | `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
 | `pymupdf-pdf` | `pip install "pymupdf>=1.23"` (`pymupdf4llm` recommended — better Markdown engine + layout addon; see its `references/pymupdf-notes.md`) |
-| `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs) |
+| `liteparse` | `npm i -g @llamaindex/liteparse`; LibreOffice (~800 MB) is **opt-in with user approval** and only for Office formats; OCR is off by default (`--no-ocr`) — see the liteparse skill's OCR gate |
 | `mineru` | Token from https://mineru.net/user-center/api-token into `MINERU_TOKEN`, `MINERU_TOKENS` (pool), or `mineru/tokens.txt`; `pip install requests`; Python 3.10+ — verify offline with `--dry-run`; `--check-token` validates the pool, `--probe` compares models on a sample |
 
 ## Mode 1 — Single document (default)
@@ -109,7 +109,8 @@ Extension is .xlsx, .odt, .rtf, .csv, .tiff, .gif, .webp, …
 ```
 File is scanned, a photo, screenshot, or user says "OCR"
 → mineru for best accuracy (VLM OCR, cloud)
-→ liteparse as local fallback (built-in Tesseract OCR)
+→ liteparse as local fallback — OCR is opt-in there: gate it first with
+  `lit is-complex FILE` (needsOcr: true + textLength: 0), then ask the user
 ```
 
 ### 3. Formulas / math / LaTeX → mineru only
@@ -147,8 +148,9 @@ Tables where cell-to-value mapping matters (clinical dosing, criteria lists)
 ```
 "JSON output", "coordinates", "spatial extraction"
 → liteparse --format json (text + per-item bboxes + OCR confidence)
-→ pymupdf-pdf --format json (plain per-page text JSON — NOT boxes;
-  for layout boxes use the pymupdf.layout addon API)
+→ pymupdf-pdf --format json (plain per-page text JSON — NOT boxes)
+→ pymupdf-pdf --tables (tables.json: bbox + rows per table, local)
+→ pymupdf-pdf layout addon (pymupdf.layout — full box classes, Python API)
 ```
 
 ### 8. User explicitly wants Markdown, fast → pdf-to-markdown
@@ -226,20 +228,24 @@ Output lands in `./output/<pdf-stem>/` (`output.md`, `output.json`, `images/`, `
 
 #### liteparse
 
+OCR is **off by default in this router** — pass `--no-ocr` on text-layer documents (the CLI would otherwise OCR silently and download Tesseract data on first run). Turn OCR on only for images or after the gate (`lit is-complex` → `needsOcr: true` + `textLength: 0`) **and** user approval.
+
 ```bash
-# Single file → text
-lit parse INPUT.pdf -o OUTPUT.txt
+# Single file → text (text-layer docs — always --no-ocr)
+lit parse INPUT.pdf --no-ocr -o OUTPUT.txt
 
 # Markdown / JSON with bounding boxes
-lit parse INPUT.pdf --format markdown -o OUTPUT.md
-lit parse INPUT.pdf --format json -o OUTPUT.json
+lit parse INPUT.pdf --no-ocr --format markdown -o OUTPUT.md
+lit parse INPUT.pdf --no-ocr --format json -o OUTPUT.json
 
-# Specific pages / image OCR
-lit parse INPUT.pdf --target-pages "1-5,10,15-20" -o OUTPUT.txt
+# Specific pages
+lit parse INPUT.pdf --no-ocr --target-pages "1-5,10,15-20" -o OUTPUT.txt
+
+# Image OCR (no text layer — OCR is the point; first run downloads ~15 MB/language)
 lit parse INPUT.jpg -o OUTPUT.txt
 
 # Batch (native — ⚠ same-stem files overwrite each other)
-lit batch-parse INPUT_DIR/ OUTPUT_DIR/ --extension .pdf
+lit batch-parse INPUT_DIR/ OUTPUT_DIR/ --extension .pdf --no-ocr
 ```
 
 #### mineru
@@ -259,9 +265,15 @@ python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./
 
 # Batch with resume (native)
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --dir INPUT_DIR/ --output ./output/ --workers 10 --resume
+
+# Token health (read-only API check, zero page spend — no --file/--output needed)
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --check-token
+
+# Undecided on model? Sample-parse first 3 pages with BOTH models (~6 pages/file)
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --probe
 ```
 
-Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). Output: `output/<stem>/<stem>.md` + `images/`. Exit 1 on any failure.
+Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). The script warns before wasting quota (text-layer PDFs, >200-page files, over-budget batches) and never re-parses an existing output dir. Output: `output/<stem>/<stem>.md` + `images/` (+ `.docx/.html/.latex` with `--extra-formats`). Exit 1 on any failure.
 
 ## Mode 2 — Folder (batch with per-file routing)
 
@@ -273,7 +285,7 @@ python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode 
 
 # Run (speed: PDFs → pdf-to-markdown, everything else → liteparse)
 python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder
-# add --format txt for liteparse plain-text output instead of Markdown
+# add --format txt for liteparse plain-text output, --no-ocr to forbid OCR everywhere
 
 # Run (accuracy: mineru-first for its formats — requires --mineru + tokens)
 python3 "$SKILL_DIR/scripts/parse_folder.py" INPUT_DIR --output ./output --mode folder --prefer accuracy --mineru
@@ -283,7 +295,8 @@ Behavior:
 
 - **Routing**: `.pdf` → pdf-to-markdown (speed) or mineru (accuracy); `.docx/.pptx/.jpg/.jpeg/.png` → liteparse (speed) or mineru (accuracy); liteparse-only formats (`.xlsx/.odt/.tiff/…`) → liteparse; anything else is listed as unroutable.
 - **Missing tools** are skipped with a note; files route to what's installed.
-- **Scanned-PDF fallback**: if pdf-to-markdown produces empty output (scanned PDF, exit 0 + ~2 bytes), the file is automatically re-run through liteparse OCR.
+- **OCR policy** (mirrors liteparse): text-layer documents run with `--no-ocr`; OCR fires only for image files and the scanned-PDF fallback below. `--no-ocr` disables both everywhere.
+- **Scanned-PDF fallback**: if pdf-to-markdown produces empty output (scanned PDF, exit 0 + ~2 bytes), the file is automatically re-run through liteparse **with OCR** — that empty result is the liteparse skill's OCR-gate "needed" signal. First OCR run per language downloads ~15 MB of Tesseract data.
 - **Resume**: re-running skips any doc+tool whose output already exists (see table below). mineru quota is never re-spent.
 - **mineru**: only runs with `--mineru` AND tokens configured; the script prints the quota cost (file count, counted PDF pages, tokens × 1000 pages/day) before parsing.
 
@@ -343,12 +356,11 @@ For very large mineru-heavy batches (>20 cloud files), prefer running the mineru
 
 ## Out of Scope
 
-This skill handles **content extraction** only. For PDF manipulation, use the appropriate skill:
+This skill handles **content extraction** only. For everything else:
 
-- **Generate PDFs from HTML** → `pdf-tools` skill (Puppeteer/Playwright)
-- **Modify, merge, split PDFs** → `pymupdf-pdf` skill
-- **Fill PDF forms** → `pymupdf-pdf` skill
-- **Encrypt/sign PDFs** → `pdf-tools` skill (qpdf, @signpdf)
+- **Merge, split, rotate, crop, delete pages · render to PNG · metadata/TOC · encrypt/decrypt · search** → `pymupdf-pdf` skill (`pdf_ops.py` — local, one dependency)
+- **Annotations, form filling, redaction** → `pymupdf-pdf` skill (recipe references)
+- **Generate PDFs from HTML (Puppeteer/Playwright) · PDF/A archival (ghostscript/verapdf) · digital signing (@signpdf) · qpdf repair/linearize/encrypt** → `pdf-tools` skill
 
 ## Workflow
 
