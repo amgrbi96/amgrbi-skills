@@ -23,7 +23,7 @@ Folder and all-methods use the orchestration script because the per-document out
 | **Formats** | PDF only | PDF only | PDF, DOCX/ODT/RTF, PPTX/ODP, XLSX/ODS/CSV, jpg/png/gif/bmp/tiff/webp/svg | PDF, DOCX, PPTX, jpg/jpeg/png **only** |
 | **Output** | Structured Markdown | Markdown / JSON / images / tables | Text/Markdown/JSON + bounding boxes | Markdown + images + metadata |
 | **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast (local) | 🐢 ~0.03s/pg text-layer; OCR adds ~0.3s/pg | 🐢 Slowest (cloud round-trip) |
-| **Tables** | HTML tables, columns preserved | Rough line-based JSON | Preserves cell-to-value mappings | Best (VLM) |
+| **Tables** | HTML tables, columns preserved | Native `find_tables()` — bbox + rows | Preserves cell-to-value mappings | Best (VLM) |
 | **Formulas** | None | None | None | LaTeX recognition |
 | **OCR** | None | None | Tesseract.js (built-in) | Cloud VLM (best) |
 | **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pages/day **per token** (poolable) |
@@ -86,7 +86,7 @@ Per-tool setup after install:
 | Tool | Extra step |
 |---|---|
 | `pdf-to-markdown` | None usually — the wrapper self-installs on first run; `bin/check-env --install` pre-downloads (arm64 Linux/macOS only; Intel Macs unsupported) |
-| `pymupdf-pdf` | `pip install pymupdf` (`pymupdf4llm` only for the layout addon; see its `references/pymupdf-notes.md`) |
+| `pymupdf-pdf` | `pip install "pymupdf>=1.23"` (`pymupdf4llm` recommended — better Markdown engine + layout addon; see its `references/pymupdf-notes.md`) |
 | `liteparse` | `npm i -g @llamaindex/liteparse`; `brew install --cask libreoffice` (Office docs) |
 | `mineru` | Token from https://mineru.net/user-center/api-token into `MINERU_TOKEN`, `MINERU_TOKENS` (pool), or `mineru/tokens.txt`; `pip install requests`; Python 3.10+ |
 
@@ -217,6 +217,9 @@ python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --format 
 # JSON / images + tables
 python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --format json --outroot ./output
 python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" INPUT.pdf --images --tables --outroot ./output
+
+# Batch (native — skips docs whose output folder already exists)
+python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pymupdf_parse.py" --dir INPUT_DIR/ --outroot ./output --tables
 ```
 
 Output lands in `./output/<pdf-stem>/` (`output.md`, `output.json`, `images/`, `tables.json`). Layout boxes are a separate Python API — see the pymupdf-pdf SKILL.md.
@@ -333,7 +336,7 @@ For very large mineru-heavy batches (>20 cloud files), prefer running the mineru
 | Tool | Native flag | Orchestrator skip condition |
 |---|---|---|
 | pdf-to-markdown | none (batch redoes everything) | `<doc>/pdf-to-markdown/<stem>.md` exists and >10 bytes, or `.scanned-skip` marker |
-| pymupdf-pdf | none | `<doc>/pymupdf/<stem>/output.md` exists |
+| pymupdf-pdf | native batch skip (`--dir` skips existing output folders) | `<doc>/pymupdf/<stem>/output.md` exists |
 | liteparse | none (⚠ `batch-parse` overwrites same stems) | `<doc>/liteparse/<stem>.md` exists and non-empty |
 | mineru | `--resume` + always idempotent (existing `<stem>/` dir is skipped, quota-safe) | `<doc>/mineru/<stem>/` dir exists |
 
