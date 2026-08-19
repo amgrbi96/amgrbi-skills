@@ -92,7 +92,7 @@ $SKILL_DIR/bin/pdf-to-markdown query text OUTPUT_DIR/ "search terms" --emit-inde
 $SKILL_DIR/bin/pdf-to-markdown query text corpus.idx "search terms"                          # reuse, faster
 ```
 
-Useful options: `-k N` results (default 8), `-e N` context lines (default 5), `--display json` for machine-readable hits (`document`, `line`, `score`, `text`), `--mode strict|balanced|lenient`.
+Useful options: `-k N` results (default 8), `-e N` context lines (default 5), `--display json` for machine-readable hits (`line`, `score`, `text`, plus `document` when the corpus has multiple files — index queries omit it), `--mode strict|balanced|lenient`.
 
 Notes: both subcommands' `--vision` variants hit the same 3017 license gate. `self-update` also exists but is redundant — the wrapper already auto-updates every 6 hours.
 
@@ -100,7 +100,7 @@ Notes: both subcommands' `--vision` variants hit the same 3017 license gate. `se
 
 - Headings become ATX (`#`/`##`), mapped from font size/weight.
 - **Heading detection is inconsistent**: headings immediately followed by a list or a table are sometimes emitted as plain text. Spot-check heading counts against the PDF.
-- Tables become HTML `<table>` blocks, not GFM pipe tables. Column structure is preserved; fine for rendering and LLMs, awkward for grep/diff.
+- Tables become HTML `<table>` blocks, not GFM pipe tables. Column structure is preserved; fine for rendering and LLMs, awkward for grep/diff. Detection needs roughly 3+ data rows — smaller grids degrade to aligned plain-text lines.
 - Two-column pages keep correct column reading order on simple layouts. Complex layouts are untested here — prefer mineru.
 - Multi-page documents concatenate with **no page-break markers**, and repeated headers/footers are kept verbatim on every page.
 - Whitespace is loose: runs of blank lines between blocks.
