@@ -1,6 +1,6 @@
 ---
 name: pymupdf-pdf
-description: Fast local PDF parsing with PyMuPDF (fitz) for Markdown/JSON outputs and optional images/tables. Use when speed matters more than robustness, or as a fallback while heavier parsers are unavailable. Default to single-PDF parsing with per-document output folders.
+description: Local PDF workbench on PyMuPDF — extract text/tables/images to Markdown or JSON, merge/split/rotate/delete pages, render to PNG, read/write metadata and TOC, search, encrypt/decrypt, plus recipes for annotations, forms, redaction, and PDF creation. Use for any local, no-cloud PDF task; prefer mineru for VLM-grade accuracy and pdf-tools for JS/Puppeteer pipelines.
 metadata:
   openclaw:
     emoji: "📄"
@@ -17,14 +17,13 @@ metadata:
         label: "Optional: better Markdown engine + layout detection addon"
 ---
 
-# PyMuPDF PDF
+# PyMuPDF PDF Workbench
 
-## Overview
-Parse PDFs locally using PyMuPDF for fast, lightweight extraction into Markdown by default, with optional JSON and image/table outputs in a per-document directory.
+One dependency (`pip install pymupdf`), fully local, covering the whole PDF lifecycle: extraction, manipulation, creation, annotation, forms, and security. Two CLIs plus recipe references — load only the reference you need (progressive disclosure; don't read them all up front).
 
 ## Setup
 
-Prerequisites: `python3` + the `pymupdf` package. Nothing else — no cloud, no token, no other binaries. The script exits 1 with an install hint if PyMuPDF is missing (`--help` works without it).
+Prerequisites: `python3` + the `pymupdf` package. No cloud, no token, no other binaries. Both scripts exit 1 with an install hint if PyMuPDF is missing (`--help` works without it).
 
 1. Install PyMuPDF:
 
@@ -37,7 +36,7 @@ If pip refuses with "externally-managed-environment" (macOS/Linux system Python)
 ```bash
 python3 -m venv ~/.venvs/pymupdf
 ~/.venvs/pymupdf/bin/pip install pymupdf
-# then invoke the script with that interpreter:
+# then invoke the scripts with that interpreter:
 ~/.venvs/pymupdf/bin/python3 scripts/pymupdf_parse.py /path/to/file.pdf
 ```
 
@@ -49,45 +48,47 @@ or force it: `pip install --break-system-packages pymupdf`.
 python3 -c "import pymupdf; print(pymupdf.__version__)"   # expect: 1.24.x or later
 ```
 
-3. Smoke-test the script (validates dependency + a real PDF, writes nothing):
+3. Smoke-test (validates dependency + a real PDF, writes nothing):
 
 ```bash
 ./scripts/pymupdf_parse.py /path/to/any.pdf --dry-run
 # expect: "✅ Dry run OK — valid PDF, N pages. Ready to parse." (exit 0)
 ```
 
-Troubleshooting: NixOS `libstdc++` import failures and other notes live in `references/pymupdf-notes.md`.
-
-Optional but recommended — `pymupdf4llm` unlocks the higher-quality Markdown engine (headers, real tables) and layout detection (see below):
+Optional but recommended — `pymupdf4llm` unlocks the higher-quality Markdown engine and layout detection:
 
 ```bash
 pip install pymupdf4llm
 ```
 
-## Quick start (single PDF)
-```bash
-# Run from the skill directory
-./scripts/pymupdf_parse.py /path/to/file.pdf \
-  --format md \
-  --outroot ./pymupdf-output
-```
+Troubleshooting: NixOS `libstdc++` import failures and other notes live in `references/pymupdf-notes.md`.
 
-Always validate first — checks the file and opens the PDF without writing anything:
+## The two CLIs
 
 ```bash
-./scripts/pymupdf_parse.py /path/to/file.pdf --dry-run
+# Extraction: Markdown / JSON / tables / images
+./scripts/pymupdf_parse.py file.pdf --format both --tables --images --md-engine auto
+
+# Operations: merge, split, rotate, delete, render, info, meta, toc, search, encrypt, decrypt
+./scripts/pdf_ops.py info file.pdf
+./scripts/pdf_ops.py merge --inputs a.pdf b.pdf -o merged.pdf
+./scripts/pdf_ops.py render file.pdf --pages 1-3 --dpi 150 --outroot pngs/
+./scripts/pdf_ops.py encrypt file.pdf --user-pw secret -o enc.pdf
 ```
 
-## Options
+Subcommand flags (including `--dry-run` and `--password`) go **after** the subcommand name. Both scripts: pre-flight validation, `--dry-run`, exit code 0 only on success, JSON summary at the end.
+
+## Parse options
+
 - `--format md|json|both` (default: `md`)
 - `--md-engine auto|basic|pymupdf4llm` (default: `auto` — uses pymupdf4llm when installed, else basic)
-- `--images` to extract images
-- `--tables` to extract a simple line-based table JSON (quick/rough)
+- `--images` to extract embedded images
+- `--tables` native table extraction via `page.find_tables()` — bbox + rows as lists (falls back to line-based on PyMuPDF < 1.23)
 - `--outroot DIR` to change output root (default: `./pymupdf-output`)
-- `--lang` adds a language hint into JSON output metadata (default: `en`)
+- `--lang` language hint recorded in JSON output metadata (default: `en`)
 - `--dry-run` to validate the input PDF and exit without writing anything
 
-## Markdown engine guide
+### Markdown engine guide
 
 | Engine | Speed | Quality | Notes |
 |---|---|---|---|
@@ -97,92 +98,42 @@ Always validate first — checks the file and opens the PDF without writing anyt
 
 Requesting `pymupdf4llm` explicitly exits 1 with an install hint if the package is missing; `auto` silently falls back to `basic`. The chosen engine is recorded in the JSON summary (`md_engine`).
 
+## Capability routing (progressive disclosure)
+
+Load the matching reference file only when the task reaches that family:
+
+| Task family | Load | CLI shortcut |
+|---|---|---|
+| Text extraction modes, words/spans, search, OCR | `references/extract.md` | `pymupdf_parse.py`, `pdf_ops.py search` |
+| Tables (`find_tables`), embedded images, rendering/crops, `pymupdf.layout` bboxes | `references/tables-images-layout.md` | `--tables`, `--images`, `pdf_ops.py render` |
+| Merge, split, reorder, rotate, crop, delete pages | `references/manipulate.md` | `pdf_ops.py merge/split/rotate/delete` |
+| Create PDFs: text, fonts, images, drawing, HTML (Story) | `references/create.md` | — (recipes) |
+| Annotations, form filling, redaction | `references/annotate-forms-redact.md` | — (recipes) |
+| Encrypt/decrypt, metadata, TOC, embedded files, links | `references/security-metadata.md` | `pdf_ops.py encrypt/decrypt/meta/toc/info` |
+| Install issues, NixOS libstdc++ | `references/pymupdf-notes.md` | — |
+
 ## Error handling
-- Pre-flight checks reject: missing file, non-PDF extension, empty file, corrupt PDF, password-protected PDF — each with a one-line error
-- Missing PyMuPDF exits with a clear install hint (`pip install pymupdf`); `--help` works without the dependency
-- Exit code 0 only on success (or dry-run OK); 1 on invalid input, missing dependency, or parse failure — safe for scripting
-- A JSON summary block (file, pages, outputs, elapsed) prints at the end
 
-## Output conventions
-- Create `./pymupdf-output/<pdf-stem>/` by default (filename without extension).
-- Markdown output: `output.md` (with `<!-- page N -->` markers per page)
-- JSON output: `output.json` (includes `lang`)
-- Images: `images/` subdir (`page-N-img-M.png`)
-- Tables: `tables.json` (rough line-based)
+- Pre-flight checks reject: missing file, non-PDF extension, empty file, corrupt PDF, password-protected PDF (supply `--password`) — one-line errors
+- Missing PyMuPDF exits with a clear install hint; `--help` works without the dependency
+- Exit code 0 only on success (or dry-run OK); 1 on invalid input, missing dependency, or failure — safe for scripting
+- JSON summary block at the end of every run (op/file/pages/outputs/elapsed)
+- `pdf_ops.py` never writes in place: output must differ from input; overwritten outputs are explicit (`-o`)
 
-## Layout Detection (pymupdf.layout addon)
+## Output conventions (parse)
 
-Detect tables, images, headers with bounding boxes — local, GNN-based, no cloud needed.
+- `./pymupdf-output/<pdf-stem>/` by default (filename without extension)
+- `output.md` (with `<!-- page N -->` markers in basic engine), `output.json` (includes `lang`)
+- `images/` subdir (`page-N-img-M.png`), `tables.json` (bbox + row lists)
 
-### Setup
-
-```bash
-pip install pymupdf pymupdf4llm --break-system-packages
-```
-
-### API
-
-```python
-import pymupdf4llm
-import pymupdf.layout as layout_mod
-import json
-
-layout_mod.activate()  # MUST call before to_json()
-
-raw = pymupdf4llm.to_json("document.pdf", pages=[0,1,2])
-result = json.loads(raw)  # returns JSON string, parse it
-
-for page_data in result["pages"]:
-    page_num = page_data["page_number"]
-    for box in page_data.get("boxes", []):
-        print(box["boxclass"])  # "table", "image", "section-header", "page-header", "text"
-        print(box["x0"], box["y0"], box["x1"], box["y1"])  # PDF-native coordinates
-```
-
-### Box classes
-
-| `boxclass` | Meaning |
-|---|---|
-| `table` | Detected table region |
-| `image` | Embedded image/figure |
-| `section-header` | Section or column header |
-| `page-header` | Running header/footer |
-| `text` | General text block |
-
-### Crop a detected table to PNG
-
-```python
-import pymupdf, io
-from PIL import Image
-
-doc = pymupdf.open("document.pdf")
-page = doc[page_num - 1]
-mat = pymupdf.Matrix(300/72, 300/72)  # 300 DPI
-pix = page.get_pixmap(matrix=mat, clip=pymupdf.Rect(x0, y0, x1, y1))
-img = Image.open(io.BytesIO(pix.tobytes("png")))
-img.save("table.png")
-```
-
-### Critical notes
-
-- **Import**: `import pymupdf.layout` (NOT `import pymupdf_layout`)
-- **Activation**: Must call `layout_mod.activate()` before `pymupdf4llm.to_json()` to populate `boxes`
-- **to_json() returns a string**: Must `json.loads()` it
-- **Page numbers**: 1-indexed in `page_number` field; `doc[page_num - 1]` for PyMuPDF access
-- **Landscape pages**: PyMuPDF handles rotation automatically via `get_pixmap(clip=...)`
-- **Padding**: Add ~8px padding around bboxes for cleaner crops
-
-### When to use
+## When to use vs. neighbors
 
 | Need | Tool |
 |---|---|
-| Block-level layout detection (tables, images, headers) | `pymupdf.layout` |
-| Crop table/figure images from PDF | `pymupdf.layout` bboxes → `get_pixmap(clip=...)` |
-| Fast text extraction | PyMuPDF `page.get_text()` |
-| Higher accuracy layout with formula recognition | MinerU (cloud VLM) |
-| PDF creation/manipulation (merge, split, rotate, forms, render) | **Not this skill** — use the `pdf` document-production skill (e.g. anthropics/skills@pdf) |
+| Any local PDF task, one Python dependency | **this skill** |
+| Fastest PDF → structured Markdown | `pdf-to-markdown` skill |
+| DOCX/PPTX/XLSX/images + OCR + tables | `liteparse` skill |
+| Highest accuracy, formulas, batch (cloud VLM) | `mineru` skill |
+| JS-first pipelines: Puppeteer HTML→PDF, signing, BullMQ | `pdf-tools` skill |
 
-## Notes
-- PyMuPDF is fast but less robust on complex PDFs.
-- For more robust parsing, use a heavy-duty OCR parser (e.g., MinerU) if installed.
-- `pymupdf.layout` gives block-level bboxes locally (GNN-based) — good alternative to MinerU cloud when layout detection is needed without cloud dependency.
+For routing across parsers, start with the `parse-docs` skill.

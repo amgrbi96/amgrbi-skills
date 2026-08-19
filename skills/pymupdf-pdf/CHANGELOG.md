@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.0 (2026-08-19)
+
+Full PyMuPDF workbench: restructured for progressive disclosure (lean SKILL.md
+routing to per-family references). Covers all PyMuPDF capability families.
+
+### Added
+- `scripts/pdf_ops.py`: operations CLI with 11 subcommands — info, merge,
+  split (per-page or grouped ranges), rotate, delete, render (PNG at DPI),
+  meta read/set, toc read/set, search, encrypt (AES-256), decrypt — each with
+  pre-flight checks, --dry-run, exit codes, JSON summary
+- `--tables` upgraded from line-based placeholder to native
+  `page.find_tables()`: bbox, row/col counts, rows as lists (line-based
+  fallback kept for PyMuPDF < 1.23)
+- Six per-family reference files: extract, tables-images-layout, manipulate,
+  create, annotate-forms-redact, security-metadata — every snippet verified
+  against PyMuPDF 1.28
+- SKILL.md rewritten as a capability router (progressive disclosure)
+
+### Fixed
+- Removed incorrect `pymupdf.open(path, password=...)` claim (password kwarg
+  does not exist; authenticate() after open is the only path)
+
 ## v0.3.0 (2026-08-19)
 
 ### Added

@@ -107,13 +107,24 @@ def extract_images(doc, outdir: Path) -> int:
     return count
 
 
-def extract_tables_basic(doc) -> list:
-    # PyMuPDF doesn't provide robust table extraction. This is a placeholder
-    # returning line-based text per page for quick parsing.
+def extract_tables(doc) -> list:
+    """Native table detection (page.find_tables, PyMuPDF >= 1.23).
+    Falls back to line-based text per page on very old installs."""
     tables = []
     for i, page in enumerate(doc, start=1):
-        text = page.get_text("text")
-        tables.append({"page": i, "lines": text.splitlines()})
+        if not hasattr(page, "find_tables"):  # PyMuPDF < 1.23
+            tables.append({"page": i, "lines": page.get_text("text").splitlines()})
+            continue
+        finder = page.find_tables()
+        for t_idx, tab in enumerate(finder.tables, start=1):
+            tables.append({
+                "page": i,
+                "table": t_idx,
+                "bbox": [round(v, 1) for v in tab.bbox],
+                "row_count": tab.row_count,
+                "col_count": tab.col_count,
+                "rows": tab.extract(),
+            })
     return tables
 
 
@@ -131,7 +142,9 @@ def main():
                         help="Markdown engine: auto uses pymupdf4llm when installed (headers, real tables), "
                              "else basic (default: auto)")
     parser.add_argument("--images", action="store_true", help="Extract images")
-    parser.add_argument("--tables", action="store_true", help="Extract simple tables (lines)")
+    parser.add_argument("--tables", action="store_true",
+                        help="Extract tables via native page.find_tables() (rows as lists; "
+                             "falls back to line-based output on PyMuPDF < 1.23)")
     parser.add_argument("--lang", default="en", help="Language hint recorded in JSON output (default: en)")
     parser.add_argument("--dry-run", action="store_true", help="Validate the input PDF, then exit without writing anything")
     args = parser.parse_args()
@@ -201,7 +214,7 @@ def main():
             print(f"🖼️  {img_dir} ({count} image{'s' if count != 1 else ''})")
 
         if args.tables:
-            tables = extract_tables_basic(doc)
+            tables = extract_tables(doc)
             tables_path = outdir / "tables.json"
             tables_path.write_text(json.dumps(tables, ensure_ascii=False, indent=2), encoding="utf-8")
             outputs.append(str(tables_path))

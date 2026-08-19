@@ -28,7 +28,7 @@ A layered toolkit — `parse-docs` routes to the right tool for the job.
 |---|---|---|
 | **[parse-docs](skills/parse-docs/)** | 🧭 **Router** — picks the right parser by intent (speed vs. accuracy vs. tables vs. formulas) | `amgrbi96/amgrbi-skills/skills/parse-docs` |
 | **[pdf-to-markdown](skills/pdf-to-markdown/)** | ⚡ Fastest PDF → structured Markdown (~0.009s/page) | `…/skills/pdf-to-markdown` |
-| **[pymupdf-pdf](skills/pymupdf-pdf/)** | 📄 Local PDF parsing + layout detection (PyMuPDF) | `…/skills/pymupdf-pdf` |
+| **[pymupdf-pdf](skills/pymupdf-pdf/)** | 📄 Local PDF workbench on PyMuPDF — extract (md/json/tables/images), merge/split/rotate, render, meta/TOC, encrypt, annotations/forms/redaction recipes | `…/skills/pymupdf-pdf` |
 | **[liteparse](skills/liteparse/)** | 📚 Multi-format (DOCX/PPTX/XLSX/img) + OCR + tables | `…/skills/liteparse` |
 | **[mineru](skills/mineru/)** | ☁️ Cloud VLM — highest accuracy, formulas, batch | `…/skills/mineru` |
 
