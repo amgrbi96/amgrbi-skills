@@ -156,7 +156,7 @@ Response:
 | `enable_formula` | bool | `true` | LaTeX formula recognition |
 | `enable_table` | bool | `true` | Table structure recognition |
 | `language` | string | `ch` | `auto` \| `en` \| `ch` |
-| `page_ranges` | string | all | `"1-10,15,20-30"` |
+| `page_ranges` | string | all | `"1-10,15,20-30"` — ⚠ rejected by some PDFs server-side (`-60010`, "replace the file"; field-verified Aug 2026) even when those pages parse fine standalone; prefer physically splitting the file into parts |
 | `extra_formats` | array | `[]` | `["docx","html","latex"]` |
 | `data_id` | string | — | Custom identifier |
 | `no_cache` | bool | `false` | Bypass cache |
@@ -260,7 +260,7 @@ Verified codes from live docs + live calls:
 | `-60005` | File too large (>200 MB) |
 | `-60006` | Too many pages (>200) |
 | `-60008` | File read timeout |
-| `-60010` | Parse failed |
+| `-60010` | Parse failed — with `page_ranges`, deterministic per file ("replace the file"); physically split the PDF instead of retrying |
 | `-60012` | Task not found or expired |
 | `-60018` | Daily limit reached |
 | `-60023` | URL regionally restricted (foreign domains blocked) |

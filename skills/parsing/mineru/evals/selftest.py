@@ -222,6 +222,26 @@ def unit_tests():
           not ok and "-60006" in str(err) and "--pages" in str(err) and n["batch"] == 1,
           f"{ok} {err} calls={n['batch']}")
 
+    # --- process_file: -60010 with --pages fails fast (page_ranges trap) ---
+    n2 = {"batch": 0}
+
+    def trap_api(token, method, url, **kw):
+        if "file-urls/batch" in url:
+            n2["batch"] += 1
+            return {"data": {"batch_id": "b1", "file_urls": ["http://oss/fake"]}}
+        if "extract-results" in url:
+            return {"data": {"extract_result": [{"state": "failed", "err_msg": "replace the file"}]}}
+        raise AssertionError(url)
+
+    (src / "trap.pdf").write_bytes(b"%PDF-1.4 fake")
+    with mock.patch.object(m, "api_call", trap_api), \
+         mock.patch.object(m, "requests", mock.MagicMock(put=fake_put)):
+        ok, stem, err = m.process_file(m.TokenPool(toks), src / "trap.pdf", out_dir, 0, 1,
+                                       opts(pages="1-200"))
+    check("pages trap: -60010 fails fast with split hint",
+          not ok and "-60010" in str(err) and "split" in str(err).lower() and n2["batch"] == 1,
+          f"{ok} {err} batches={n2['batch']}")
+
     # --- process_file: corrupt zip (HTML error page) -> 5 attempts, clean failure ---
     garbage_get = mock.MagicMock(return_value=mock.MagicMock(content=b"<html>error</html>"))
     with mock.patch.object(m, "api_call", ok_api), \

@@ -23,7 +23,7 @@ Folder and all-methods use the orchestration script because the per-document out
 | **Formats** | PDF only | PDF only | PDF, DOCX/ODT/RTF, PPTX/ODP, XLSX/ODS/CSV, jpg/png/gif/bmp/tiff/webp/svg | PDF, DOCX, PPTX, jpg/jpeg/png **only** |
 | **Output** | Structured Markdown | Markdown / JSON / images / tables | Text/Markdown/JSON + bounding boxes | Markdown + images + metadata |
 | **Speed** | ⚡ Fastest (~0.009s/pg) | ⚡ Fast basic engine; slower with `pymupdf4llm` (auto) | 🐢 ~0.03s/pg text-layer (`--no-ocr`); OCR adds ~0.3s/pg | 🐢 Slowest (cloud round-trip) |
-| **Tables** | HTML tables, columns preserved | Native `find_tables()` — bbox + rows | Preserves cell-to-value mappings | Best (VLM) |
+| **Tables** | HTML tables, columns preserved | Native `find_tables()` — bbox + rows (**ruled tables only**) | Preserves cell-to-value mappings | Best (VLM) |
 | **Formulas** | None | None | None | LaTeX recognition |
 | **OCR** | None | None | Built-in Tesseract (opt-in — gate first) | Cloud VLM (best) |
 | **Cost** | Free ≤1000 docs/mo | Free (local) | Free (local) | Free 1000 pages/day **per token** (poolable) |
@@ -176,7 +176,7 @@ Tables where cell-to-value mapping matters (clinical dosing, criteria lists)
 "JSON output", "coordinates", "spatial extraction"
 → liteparse --format json (text + per-item bboxes + OCR confidence)
 → pymupdf-pdf --format json (plain per-page text JSON — NOT boxes)
-→ pymupdf-pdf --tables (tables.json: bbox + rows per table, local)
+→ pymupdf-pdf --tables (tables.json: bbox + rows per table, local — ruled tables only)
 → pymupdf-pdf layout addon (pymupdf.layout — full box classes, Python API)
 ```
 
@@ -202,6 +202,8 @@ User needs the whole document AND accurate tables
 → Step 2: liteparse or mineru on just the table-heavy pages
 → Step 3: replace broken table sections in the Markdown with accurate output
 ```
+
+MinerU's dedicated `hybrid` backend (v2.6+) is **self-hosted only** — the cloud API exposes `pipeline | vlm | MinerU-HTML`, so "hybrid" through these skills always means the manual graft above. When step 2 sends mineru part of a large PDF, physically split and submit parts whole: the cloud `--pages`/`page_ranges` path is rejected server-side on some PDFs (see the mineru skill's Long Documents section).
 
 ### 11. Large PDF, user needs only the gist → pdf-to-markdown
 
@@ -277,10 +279,11 @@ python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./
 # 2. Single file (default model is vlm — slowest, most accurate)
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/
 
-# Long documents (>200 pages) — one command per range, shared --output;
-# each range lands in its own folder: output/BIG-1-200/, output/BIG-201-400/, …
-python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file BIG.pdf --output ./output/ --pages 1-200
-python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file BIG.pdf --output ./output/ --pages 201-400
+# Long documents (>200 pages) — physically split first (pymupdf pdf_ops.py or any
+# splitter), then parse the parts dir. Cloud --pages ranges are rejected server-side
+# on some PDFs (-60010), ~6 min burned per failed range:
+python3 "$SKILL_DIR/../pymupdf-pdf/scripts/pdf_ops.py" split BIG.pdf --outroot ./parts/ --ranges 1-200,201-400
+python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --dir ./parts/ --output ./output/ --resume
 
 # Faster model for standard docs
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./output/ --model pipeline
@@ -298,7 +301,7 @@ python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./
 python3 "$SKILL_DIR/../mineru/scripts/mineru_v2.py" --file INPUT.pdf --output ./probe/ --probe --model MinerU-HTML
 ```
 
-Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). The script warns before wasting quota (text-layer PDFs, >200-page files, over-budget batches) and never re-parses an existing output dir. Output: `output/<stem>/<stem>.md` + `images/` (+ `.docx/.html/.latex` with `--extra-formats`); with `--pages`, one folder per range (`output/<stem>-1-200/`). Probe output: `output/<stem>-probe/<model>/<stem>/<stem>.md`. Exit 1 on any failure.
+Tokens: `--token`, `MINERU_TOKENS` (comma pool), `MINERU_TOKEN`, or `mineru/tokens.txt` — all sources combine. Limits: 200 MB / 200 pages per file, 1000 pages/day per token (3 tokens ≈ 3000 pages/day). The script warns before wasting quota (text-layer PDFs, >200-page files, over-budget batches) and never re-parses an existing output dir. Output: `output/<stem>/<stem>.md` + `images/` (+ `.docx/.html/.latex` with `--extra-formats`); with `--pages` (fallback — rejected by some PDFs server-side), one folder per range (`output/<stem>-1-200/`). Probe output: `output/<stem>-probe/<model>/<stem>/<stem>.md`. Exit 1 on any failure.
 
 ## Mode 2 — Folder (batch with per-file routing)
 

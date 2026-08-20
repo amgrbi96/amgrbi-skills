@@ -15,8 +15,22 @@ for tab in tabs.tables:
         print(row)
 ```
 
-- Detects ruled tables by vector lines (best), and borderless tables with `strategy="text"` (positional heuristic).
+- Detects **ruled tables by vector lines** (best), and borderless tables with `strategy="text"` (positional heuristic — weak on real borderless tables; see below).
 - CLI: `scripts/pymupdf_parse.py file.pdf --tables` writes `tables.json` with bbox + rows.
+
+### Borderless-table blindness — check before trusting a "no tables" result
+
+`find_tables()` is effectively **ruled-table-only** on real books: `strategy="text"` rarely recovers academic/clinical borderless tables. Field check (Maudsley prescriber's guide, Aug 2026): 231 captioned borderless tables in the book; `find_tables()` flagged 19 pages total, while MinerU found 78 HTML tables in chapter 1 alone vs 2 detectable locally.
+
+When table content matters and the document uses borderless layouts (textbooks, clinical references), find the table pages **by caption, not by ruling**, and route those pages to the mineru skill (cloud VLM):
+
+```python
+import re
+caption_pages = [i + 1 for i in range(doc.page_count)
+                 if re.search(r"Table \d+\.\d+", doc[i].get_text())]
+```
+
+Large PDF: physically split out those pages (`pdf_ops.py split doc.pdf --ranges …`) and submit the parts whole — see the mineru skill's Long Documents section for why `--pages` is unreliable.
 
 ## Embedded images — extract originals
 
@@ -96,6 +110,6 @@ img.save("table.png")
 
 - **Import**: `import pymupdf.layout` (NOT `import pymupdf_layout`).
 - `layout_mod.activate()` must run before `pymupdf4llm.to_json()` or `boxes` comes back empty.
-- `find_tables()` misses borderless tables by default — try `page.find_tables(strategy="text")`.
+- `find_tables()` misses borderless tables by default — `page.find_tables(strategy="text")` exists but is weak in practice; see **Borderless-table blindness** above before trusting a "no tables" result.
 - Pixmap `.save()` cannot write CMYK — always convert first (snippet above).
 - For VLM-grade layout accuracy with formula recognition, escalate to the mineru skill (cloud).

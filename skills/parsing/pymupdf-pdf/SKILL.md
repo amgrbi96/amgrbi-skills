@@ -86,7 +86,7 @@ Subcommand flags (including `--dry-run` and `--password`) go **after** the subco
 - `--format md|json|both` (default: `md`)
 - `--md-engine auto|basic|pymupdf4llm` (default: `auto` — uses pymupdf4llm when installed, else basic)
 - `--images` to extract embedded images
-- `--tables` native table extraction via `page.find_tables()` — bbox + rows as lists (falls back to line-based on PyMuPDF < 1.23)
+- `--tables` native table extraction via `page.find_tables()` — bbox + rows as lists (falls back to line-based on PyMuPDF < 1.23); ruled tables only — borderless tables need caption-page detection + mineru (see references/tables-images-layout.md)
 - `--outroot DIR` to change output root (default: `./pymupdf-output`)
 - `--lang` language hint recorded in JSON output metadata (default: `en`)
 - `--dry-run` to validate inputs (including which batch files would be skipped) and exit without writing anything
@@ -115,7 +115,7 @@ Load the matching reference file only when the task reaches that family:
 | Encrypt/decrypt, metadata, TOC, embedded files, links | `references/security-metadata.md` | `pdf_ops.py encrypt/decrypt/meta/toc/info` |
 | Install issues, NixOS libstdc++ | `references/pymupdf-notes.md` | — |
 
-Development: after changing either script or any documented claim, run `python3 evals/smoke_test.py` (56 self-contained cases; exits nonzero on any failure).
+Development: after changing either script or any documented claim, run `python3 evals/smoke_test.py` (58 self-contained cases; exits nonzero on any failure).
 
 ## Error handling
 

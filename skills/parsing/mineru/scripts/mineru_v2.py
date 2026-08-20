@@ -7,6 +7,8 @@ Design goals (make this the only thing you need to run MinerU):
 - Pre-flight checks: file existence, extension, 200 MB size cap, token presence
 - Waste guards: skip existing outputs, warn on text-layer PDFs, page-budget estimates
 - Error-code-aware retries: never retry non-retryable API errors
+- --pages trap: server-side page_ranges rejection (-60010) fails fast with a
+  physical-split hint instead of burning ~6 min of blind retries
 - Resume: skip files whose output directory already exists
 - --probe: sample-parse with both models to pick one empirically
 - --check-token: read-only pool health check, zero page spend
@@ -258,13 +260,15 @@ def pdf_precheck_warnings(files: list[Path], pool: TokenPool) -> list[str]:
             if est > 200:
                 warnings.append(
                     f"⚠️  {f.name}: ~{est} pages (estimated) exceeds the 200-page API limit — "
-                    "split with --pages 1-200, 201-400, …")
+                    "physically split into ≤200-page parts "
+                    "(pdf_ops.py split --ranges 1-200,201-400) and submit each whole; "
+                    "server-side --pages ranges are rejected on some PDFs (-60010)")
     capacity = DAILY_PAGES_PER_TOKEN * len(pool.available())
     if capacity and total_pages > capacity:
         warnings.append(
             f"⚠️  estimated ~{total_pages} pages across {counted} PDF(s) vs ~{capacity} pages/day "
             f"pool capacity ({len(pool.available())} active token(s)) — the run will likely stop at "
-            "the daily limit; add tokens or split across days with --pages + --resume")
+            "the daily limit; add tokens or split the work across days with --resume")
     return warnings
 
 
@@ -375,11 +379,19 @@ def process_file(pool: TokenPool, file_path: Path, output_dir: Path, index, tota
                 continue  # rotate to another token without consuming a retry
             if e.code in FATAL_FILE_CODES:
                 hint = {
-                    "-60006": " — retry with --pages 1-200, 201-400, …",
+                    "-60006": " — physically split into ≤200-page parts and submit each whole "
+                              "(server-side --pages ranges are rejected on some PDFs)",
                     "-60005": " — file exceeds the 200 MB API limit",
                 }.get(e.code, "")
                 print(f" ❌ {last_err}{hint}")
                 return False, stem, f"{last_err}{hint}"  # retrying won't help this file
+            if e.code == "-60010" and opts.pages:
+                # page_ranges rejection is deterministic per file ("replace the file"):
+                # a retry re-uploads and burns ~6 min to fail the same way
+                hint = (" — server rejected page_ranges for this file; physically split it "
+                        "into ≤200-page parts and submit each whole")
+                print(f" ❌ {last_err}{hint}")
+                return False, stem, f"{last_err}{hint}"
             # other API errors: retry with backoff
         except Exception as e:  # network errors, HTTP hiccups
             last_err = str(e)
@@ -495,7 +507,8 @@ def main():
                         help="Model version (default: vlm; with --probe: probe only this model)")
     parser.add_argument("--language", default="auto", choices=["auto", "en", "ch"],
                         help="Document language (default: auto)")
-    parser.add_argument("--pages", help="Page ranges, e.g. '1-10,15,20-30' (bypasses the 200-page limit)")
+    parser.add_argument("--pages", help="Server-side page ranges, e.g. '1-10,15,20-30' — rejected by "
+                                        "some PDFs (-60010); prefer physically splitting >200-page PDFs")
     parser.add_argument("--extra-formats", help="Extra deliverables: comma list from docx,html,latex (default: none)")
     parser.add_argument("--probe", nargs="?", const=3, type=int, metavar="N",
                         help="Sample-parse to pick a model, then stop: first N pages (default: 3) "

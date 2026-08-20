@@ -26,8 +26,8 @@ archive/                 ← Deferred: prospero-search, prisma-cli, flashcards
 No build step, no linting. Two skills ship offline self-test suites — **run them after changing that skill's script or any documented claim** (they catch doc drift, and they make zero network calls; never validate by spending live API quota):
 
 ```bash
-python3 skills/parsing/mineru/evals/selftest.py         # 89 checks: CLI, token pool, probe, --pages chunks, SKILL.md drift
-python3 skills/parsing/pymupdf-pdf/evals/smoke_test.py  # 56 cases over scripts + documented API calls
+python3 skills/parsing/mineru/evals/selftest.py         # 90 checks: CLI, token pool, probe, --pages chunks, SKILL.md drift
+python3 skills/parsing/pymupdf-pdf/evals/smoke_test.py  # 58 cases over scripts + documented API calls
 ```
 
 The mineru suite diffs SKILL.md's CLI table against the script's `--help` (flags, defaults, verified stamps) — if you add or change a flag, update SKILL.md in the same commit or the suite fails.

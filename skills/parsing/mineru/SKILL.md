@@ -74,7 +74,7 @@ One read-only API call per token (zero page spend): reports valid / invalid / in
 | Limit | Value | Handled by |
 |---|---|---|
 | File size | 200 MB | pre-flight check, rejected before upload |
-| Pages per file | 200 | API error surfaced with `--pages` suggestion |
+| Pages per file | 200 | pre-flight warning prescribes a physical split |
 | Daily quota | 1000 pages/token | token rotation + state file |
 | Batch size | 50 files | one file per batch request, never hit |
 
@@ -151,12 +151,21 @@ python3 scripts/mineru_v2.py --dir ./papers/ --output ./output/ --language ch
 
 ### Long Documents (>200 pages)
 
+**Preferred: physically split the PDF into ≤200-page parts and submit each whole** — parts are ordinary files, so this always works:
+
 ```bash
-python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 1-200
-python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 201-400
+# pymupdf-pdf skill's splitter (or any splitter) → parts/big-1-200.pdf, parts/big-201-400.pdf, …
+python3 pdf_ops.py split big.pdf --outroot ./parts/ --ranges 1-200,201-400
+python3 scripts/mineru_v2.py --dir ./parts/ --output ./output/ --resume
 ```
 
-Each range lands in its own folder — `output/big-1-200/`, `output/big-201-400/` — so range runs never skip each other, and re-running a finished range is an idempotent no-op.
+`--pages` is the fallback, not the default. It sends the whole file with a server-side `page_ranges` request, and **on some PDFs the server rejects the parse (`-60010`, "replace the file") even for pages that parse fine as a standalone file** (seen on scanned Wiley textbooks, Aug 2026). The rejection is deterministic per file, each blind attempt burns ~6 minutes of retries, and the script fails fast on it — treat one `-60010` as file-level and switch to the physical split instead of retrying other ranges:
+
+```bash
+python3 scripts/mineru_v2.py --file ./big.pdf --output ./output/ --pages 1-200   # try once; on -60010 → split
+```
+
+Working ranges land in their own folders — `output/big-1-200/`, `output/big-201-400/` — and re-running a finished range is an idempotent no-op.
 
 ### Complex Layouts (slowest, most accurate)
 
@@ -189,7 +198,7 @@ python3 scripts/mineru_v2.py --file ./book.pdf --output ./probe/ --probe --model
 --resume            Report already-processed files up front and drop them from the run
 --model MODEL       pipeline | vlm | MinerU-HTML (default: vlm; with --probe: probe only this model)
 --language LANG     auto | en | ch (default: auto)
---pages RANGES      Page ranges, e.g. "1-10,15,20-30" (validated; applies to every file with --dir)
+--pages RANGES      Server-side page ranges, e.g. "1-10,15,20-30" — rejected on some PDFs (-60010); prefer a physical split (applies to every file with --dir)
 --extra-formats F   Extra deliverables: comma list from docx,html,latex (default: none)
 --probe [N]         Sample-parse first N pages to pick a model, then stop (default: 3)
 --probe-pages RANGES Probe specific pages instead of the first N, e.g. "85-87,203" (PDFs only)
@@ -212,7 +221,7 @@ python3 scripts/mineru_v2.py --file ./book.pdf --output ./probe/ --probe --model
 ## Error Handling
 
 - Up to 5 attempts per file with exponential backoff (1+2+4+8 s) for network errors, timeouts, and unrecognized API errors; token rotations (quota/invalid-token) never consume an attempt
-- Non-retryable errors fail fast, one attempt: bad params (`-500`), too large (`-60005`), too many pages (`-60006` — the error message includes a `--pages` suggestion), region-blocked URL (`-60023`)
+- Non-retryable errors fail fast, one attempt: bad params (`-500`), too large (`-60005`), too many pages (`-60006` — the error prescribes a physical split), region-blocked URL (`-60023`). Server-side `page_ranges` rejection (`-60010` with `--pages`) also fails fast — it is deterministic per file, and blind retries burn ~6 min each
 - Token errors rotate the pool (see Quota Pooling above)
 - Failed files listed in a JSON summary block at the end (machine-readable)
 - Ctrl-C saves token state and exits 130 — re-run with `--resume` to continue
@@ -224,7 +233,7 @@ The script refuses to spend quota silently:
 
 - **Duplicate runs** — existing output directories are always skipped (⏭️), so re-runs never re-parse
 - **OCR overkill** — warns when a PDF already has a text layer (a local parser likely suffices — see comparison table above)
-- **Over-limit files** — warns when a PDF is estimated >200 pages, with the exact `--pages` split to use
+- **Over-limit files** — warns when a PDF is estimated >200 pages, prescribing a physical split into ≤200-page parts (`--pages` ranges are rejected server-side on some PDFs)
 - **Over-budget batches** — warns when estimated total pages exceed the pool's daily capacity (~1000/token)
 - **Token health** — `--check-token` catches dead tokens before a run instead of mid-batch
 

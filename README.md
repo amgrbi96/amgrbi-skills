@@ -78,8 +78,8 @@ Unsure which document parser to use? Load `parse-docs` — it shortlists the fit
 No build step, no linting. Two skills ship offline self-test suites — run them after changing their scripts or any documented claim (they catch doc drift too, and make zero network calls):
 
 ```bash
-python3 skills/parsing/mineru/evals/selftest.py     # 89 checks: CLI, token pool, probe, doc drift
-python3 skills/parsing/pymupdf-pdf/evals/smoke_test.py  # 56 cases over scripts + documented API calls
+python3 skills/parsing/mineru/evals/selftest.py     # 90 checks: CLI, token pool, probe, doc drift
+python3 skills/parsing/pymupdf-pdf/evals/smoke_test.py  # 58 cases over scripts + documented API calls
 ```
 
 Skills without a suite are validated with their script's `--help` (e.g. `python3 skills/parsing/mineru/scripts/mineru_v2.py --help`).

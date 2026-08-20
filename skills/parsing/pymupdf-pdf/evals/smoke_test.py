@@ -6,6 +6,7 @@ Exits 0 only if every case passes. See evals/README.md.
 """
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -193,6 +194,21 @@ def reference_snippets(tmp: Path):
     span = doc[0].get_text("dict")["blocks"][0]["lines"][0]["spans"][0]
     check("extract: span size", span["size"] == 20)
     check("extract: search", bool(doc[0].search_for("fox")))
+
+    # tables-images-layout.md: borderless tables are invisible to find_tables();
+    # find their pages by caption regex instead and route them to mineru
+    bdoc = pymupdf.open()
+    bpage = bdoc.new_page()
+    bpage.insert_text((72, 96), "Table 3.1  Dosing thresholds", fontsize=11)
+    bpage.insert_text((72, 120), "drug      dose", fontsize=10)
+    bpage.insert_text((72, 140), "lithium   600 mg", fontsize=10)
+    bdoc.save(tmp / "borderless.pdf")
+    check("tables: borderless invisible to find_tables",
+          len(bdoc[0].find_tables().tables) == 0)
+    caption_pages = [i + 1 for i in range(bdoc.page_count)
+                     if re.search(r"Table \d+\.\d+", bdoc[i].get_text())]
+    check("tables: caption regex finds borderless page",
+          caption_pages == [1], str(caption_pages))
 
     # annotate-forms-redact.md: highlight + widget + redact
     d = pymupdf.open(tmp / "sample.pdf")
