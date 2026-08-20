@@ -1,7 +1,7 @@
 ---
 name: liteparse
 description: Parse PDFs, Office documents (DOCX/PPTX/XLSX/ODT), and images locally into text, Markdown, or JSON with bounding boxes and OCR confidence — no cloud, no LLM, nothing leaves the machine. Use when the user wants local/offline/private document parsing or OCR (scanned PDFs, photos, screenshots), spatial text coordinates, page screenshots, or batch conversion of mixed-format folders — even casually ("grab the text from this", "read this image", "what does this scan say"). If the user needs highest accuracy (formulas, complex layouts, degraded scans) and cloud is acceptable, route to mineru instead.
-compatibility: 'Node 18+; `npm i -g @llamaindex/liteparse` (bin: `lit`; verified against npm 2.13.1 — `lit --version` misleadingly prints a hardcoded 2.0.0, don't use it for install checks). LibreOffice required for Office formats.'
+compatibility: 'Node 18+; `npm i -g @llamaindex/liteparse` (bin: `lit`; verified against npm 2.13.1 — `lit --version` misleadingly prints a hardcoded 2.0.0, don''t use it for install checks). LibreOffice required for Office formats.'
 license: MIT
 metadata:
   author: LlamaIndex
